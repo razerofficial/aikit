@@ -1,0 +1,263 @@
+#!/bin/bash
+
+# --- Script Configuration ---
+DEFAULT_IFNAME="eth0"
+VALID_LOG_LEVELS=("trace" "debug" "info" "warning" "error" "fatal")
+
+# Variables to store user-provided or default values
+TARGET_IFNAME=""                  # will store the value from --ifname
+TARGET_RAY_ADDRESS=""             # Will store the value from --address
+TARGET_NODE_IP_ADDRESS=""         # Will store the value from --node-ip-address
+TARGET_CUDA_VISIBLE_DEVICES=""    # Will store the value from --cuda-visible-devices
+TARGET_LOG_LEVEL=""               # Will store the value from --log-level
+TARGET_HEALTH_CHECK_TIMEOUT_MS="" # Will store the value from --health-check-timeout-ms
+
+# --- Helper Functions ---
+usage() {
+    cat << EOF
+
+Usage: $(basename "$0") [OPTIONS] [RAY_START_OPTIONS...]
+
+Starts a Ray worker node with configurable network interface, ray address, CUDA GPU visibility, log level and health check timeout.
+
+OPTIONS:
+  --ifname <interface_name>      Specify the network interface for NCCL_SOCKET_IFNAME and GLOO_SOCKET_IFNAME.
+                                 Defaults to '${DEFAULT_IFNAME}'.
+  --address <ray_head_ip:port>   Specify Ray head IP and port. (Required)
+  --cuda-visible-devices <ids>   Specify the CUDA_VISIBLE_DEVICES string (e.g., "0", "0,1", "1,3").
+                                 If not provided, CUDA_VISIBLE_DEVICES will not be set by this script,
+                                 and Ray will use its default GPU visibility.
+  --log-level <level>            Specify the Ray backend log level.
+                                 select one from [$(IFS=, ; echo "${VALID_LOG_LEVELS[*]}")].
+                                 If not provided, RAY_BACKEND_LOG_LEVEL will not be set by this script
+                                 (Ray's internal default is info).
+  --health-check-timeout-ms <ms> Specify the Ray health check timeout in milliseconds.
+                                 If provided, exports RAY_health_check_timeout_ms.
+                                 (Ray's internal default is 10000).
+  --help                         Display this help message and exit.
+
+RAY_START_OPTIONS:
+  Any additional options will be passed directly to the 'ray start' command.
+  These should come after script-specific options or after '--'.
+  For example: --num-cpus 4 --num-gpus 2 --block
+
+Examples:
+  $(basename "$0") --address 192.168.1.10:6379
+  $(basename "$0") --ifname my_interface --address 192.168.1.10:6379 --log-level trace --health-check-timeout-ms 20000
+  $(basename "$0") --cuda-visible-devices "0" --address 192.168.1.10:6379
+  $(basename "$0") --cuda-visible-devices "1,2" --address 192.168.1.10:6379 --num-gpus 2
+  $(basename "$0") --ifname my_interface --address 192.168.1.10:6379 -- --dashboard-port 8266
+EOF
+    exit 0
+}
+
+is_valid_log_level() {
+    local level_to_check="$1"
+
+    # Assumes level_to_check is already lowercased by the caller
+    for valid_level in "${VALID_LOG_LEVELS[@]}"; do
+        if [[ "$level_to_check" == "$valid_level" ]]; then
+            # Valid
+            return 0
+        fi
+    done
+
+    # Invalid
+    return 1
+}
+
+is_number() {
+    local re='^[0-9]+$'
+    if ! [[ "$1" =~ $re ]] ; then
+        # Not a number
+        return 1
+    fi
+
+    # Is a number
+    return 0
+}
+
+# --- Argument Parsing ---
+RAY_ARGS=() # Collect Ray-specific options in an array
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --ifname)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "Error: --ifname requires an argument." >&2; usage; exit 1
+            fi
+            TARGET_IFNAME="$2"; shift 2
+            ;;
+        --ifname=*)
+            TARGET_IFNAME="${1#--ifname=}"; shift
+            ;;
+        --address)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "Error: --address requires an argument." >&2; usage; exit 1
+            fi
+            TARGET_RAY_ADDRESS="$2"; shift 2
+            ;;
+        --address=*)
+            TARGET_RAY_ADDRESS="${1#--address=}"; shift
+            ;;
+        --node-ip-address)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "Error: --node-ip-address requires an argument." >&2; usage; exit 1
+            fi
+            TARGET_NODE_IP_ADDRESS="$2"; shift 2
+            ;;
+        --node-ip-address=*)
+            TARGET_NODE_IP_ADDRESS="${1#--node-ip-address=}"; shift
+            ;;
+        --cuda-visible-devices)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "Error: --cuda-visible-devices requires an argument (e.g., \"0\" or \"0,1\")." >&2; usage; exit 1
+            fi
+            TARGET_CUDA_VISIBLE_DEVICES="$2"; shift 2
+            ;;
+        --cuda-visible-devices=*)
+            TARGET_CUDA_VISIBLE_DEVICES="${1#--cuda-visible-devices=}"; shift
+            ;;
+        --log-level)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "Error: --log-level requires an argument." >&2; usage; exit 1
+            fi
+
+            _val_lower=$(echo "$2" | tr '[:upper:]' '[:lower:]')
+            if ! is_valid_log_level "$_val_lower"; then
+                echo "Error: Invalid --log-level '$2'. Must be one of: [$(IFS=, ; echo "${VALID_LOG_LEVELS[*]}")] ." >&2; usage; exit 1
+            fi
+            TARGET_LOG_LEVEL="$_val_lower"; shift 2
+            ;;
+        --log-level=*)
+            _val="${1#--log-level=}"
+            if [[ -z "$_val" ]]; then
+                echo "Error: --log-level requires a non-empty argument." >&2; usage; exit 1
+            fi
+
+            _val_lower=$(echo "$_val" | tr '[:upper:]' '[:lower:]')
+            if ! is_valid_log_level "$_val_lower"; then
+                 echo "Error: Invalid --log-level '$_val'. Must be one of: [$(IFS=, ; echo "${VALID_LOG_LEVELS[*]}")] ." >&2; usage; exit 1
+            fi
+            TARGET_LOG_LEVEL="$_val_lower"; shift
+            ;;
+        --health-check-timeout-ms)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "Error: --health-check-timeout-ms requires a numeric argument." >&2; usage; exit 1
+            fi
+
+            if ! is_number "$2"; then
+                echo "Error: --health-check-timeout-ms value '$2' must be a number." >&2; usage; exit 1
+            fi
+            TARGET_HEALTH_CHECK_TIMEOUT_MS="$2"; shift 2
+            ;;
+        --health-check-timeout-ms=*)
+            _val="${1#--health-check-timeout-ms=}"
+            if [[ -z "$_val" ]]; then
+                echo "Error: --health-check-timeout-ms requires a non-empty numeric argument." >&2; usage; exit 1
+            fi
+
+            if ! is_number "$_val"; then
+                echo "Error: --health-check-timeout-ms value '$_val' must be a number." >&2; usage; exit 1
+            fi
+            TARGET_HEALTH_CHECK_TIMEOUT_MS="$_val"; shift
+            ;;
+        --help)
+            usage
+            ;;
+        --) # End of script options
+            shift; RAY_ARGS+=("$@"); break
+            ;;
+        *)  # Positional argument, assume it's for ray start
+            RAY_ARGS+=("$1"); shift
+            ;;
+    esac
+done
+
+# --- Set Defaults for Configurable Options (if not provided by user) ---
+if [[ -z "$TARGET_IFNAME" ]]; then
+    TARGET_IFNAME="$DEFAULT_IFNAME"
+fi
+if [[ -z "$TARGET_RAY_ADDRESS" ]]; then
+    echo "Error: --address argument is required." >&2; usage; exit 1
+fi
+
+# --- Output Configuration ---
+echo "INFO: --- Begin Configuration ---"
+echo "INFO: Network Interface (NCCL/GLOO_SOCKET_IFNAME): '${TARGET_IFNAME}'"
+echo "INFO: Ray Address: '${TARGET_RAY_ADDRESS}'"
+
+# --- Environment Variables ---
+echo "INFO: Setting common environment variables..."
+export NCCL_DEBUG=${NCCL_DEBUG:-TRACE}
+export VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-DEBUG}
+export NCCL_SOCKET_IFNAME="$TARGET_IFNAME"
+export GLOO_SOCKET_IFNAME="$TARGET_IFNAME"     # This is MUST
+export NCCL_ASYNC_ERROR_HANDLING=${NCCL_ASYNC_ERROR_HANDLING:-1}
+
+echo "INFO: NCCL_DEBUG=$NCCL_DEBUG"
+echo "INFO: VLLM_LOGGING_LEVEL=$VLLM_LOGGING_LEVEL"
+echo "INFO: NCCL_SOCKET_IFNAME=$NCCL_SOCKET_IFNAME"
+echo "INFO: GLOO_SOCKET_IFNAME=$GLOO_SOCKET_IFNAME"
+echo "INFO: NCCL_ASYNC_ERROR_HANDLING=$NCCL_ASYNC_ERROR_HANDLING"
+
+# Set VLLM_HOST_IP if --node-ip-address was provided
+if [[ -n "$TARGET_NODE_IP_ADDRESS" ]]; then
+    export VLLM_HOST_IP="$TARGET_NODE_IP_ADDRESS"
+    echo "INFO: VLLM_HOST_IP=$VLLM_HOST_IP"
+fi
+
+# --- CUDA_VISIBLE_DEVICES Configuration ---
+if [[ -n "$TARGET_CUDA_VISIBLE_DEVICES" ]]; then
+    echo "INFO: Setting CUDA_VISIBLE_DEVICES to '${TARGET_CUDA_VISIBLE_DEVICES}' as per --cuda-visible-devices option."
+    export CUDA_VISIBLE_DEVICES="$TARGET_CUDA_VISIBLE_DEVICES"
+    echo "INFO: CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
+else
+    echo "INFO: CUDA_VISIBLE_DEVICES is not set by this script. Ray will use its default GPU visibility (all visible GPUs, or as specified by --num-gpus if provided to Ray)."
+fi
+
+# Set RAY_BACKEND_LOG_LEVEL if --log-level was provided
+if [[ -n "$TARGET_LOG_LEVEL" ]]; then
+    echo "INFO: Setting RAY_BACKEND_LOG_LEVEL to '${TARGET_LOG_LEVEL}' as per --log-level option."
+    export RAY_BACKEND_LOG_LEVEL="$TARGET_LOG_LEVEL"
+    echo "INFO: RAY_BACKEND_LOG_LEVEL=$RAY_BACKEND_LOG_LEVEL"
+fi
+
+# Set RAY_health_check_timeout_ms if --health-check-timeout-ms was provided
+if [[ -n "$TARGET_HEALTH_CHECK_TIMEOUT_MS" ]]; then
+    echo "INFO: Setting RAY_health_check_timeout_ms to '${TARGET_HEALTH_CHECK_TIMEOUT_MS}' as per --health-check-timeout-ms option."
+    export RAY_health_check_timeout_ms="$TARGET_HEALTH_CHECK_TIMEOUT_MS"
+    echo "INFO: RAY_health_check_timeout_ms=$RAY_health_check_timeout_ms"
+fi
+echo "INFO: --- End Configuration ---"
+echo
+
+
+# --- Start Ray Worker Node ---
+echo "INFO: Starting Ray worker node..."
+LOG_COMMAND="ray start --address \"$TARGET_RAY_ADDRESS\""
+if [[ ${#RAY_ARGS[@]} -gt 0 ]]; then
+    # Append additional ray arguments, quoting them for the log string
+    # This is an approximation for logging. The actual execution is safer.
+    for arg in "${RAY_ARGS[@]}"; do
+        # Simple quoting for display. Handles arguments with spaces if they were passed quoted.
+        if [[ "$arg" == *" "* ]]; then
+            LOG_COMMAND+=" \"$arg\""
+        else
+            LOG_COMMAND+=" $arg"
+        fi
+    done
+fi
+echo "INFO: Ray command to be executed: $LOG_COMMAND"
+
+# Execute ray start with the configured ray head address and any collected RAY_ARGS
+ray start --address "$TARGET_RAY_ADDRESS" "${RAY_ARGS[@]}"
+
+EXIT_CODE=$?
+if [[ $EXIT_CODE -eq 0 ]]; then
+    echo "INFO: Ray worker node 'ray start' command executed successfully."
+else
+    echo "ERROR: Ray worker node 'ray start' command failed with exit code $EXIT_CODE."
+fi
+echo "INFO: Check Ray logs and dashboard (if started) for status."
+
+exit $EXIT_CODE

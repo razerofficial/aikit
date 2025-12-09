@@ -1,0 +1,359 @@
+# Base image with CUDA 12.9.1 and Ubuntu 24.04
+FROM nvidia/cuda:12.9.1-devel-ubuntu24.04 AS base
+
+ARG TARGETPLATFORM
+ARG CUDA_VERSION=12.9.1
+ARG USERNAME=Razer
+ARG VIRTUAL_ENV=torch280_cuda129
+ARG torch_cuda_arch_list='7.0;7.2;7.5;8.0;8.6;8.7;8.9;9.0;10.0;10.1;10.3;12.0;12.1'
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install tzdata, compilers, and essential tools
+RUN apt-get update && \
+    echo "tzdata tzdata/Areas select Asia" | debconf-set-selections && \
+    echo "tzdata tzdata/Zones/Asia select Singapore" | debconf-set-selections && \
+    apt-get install -y tzdata git build-essential cmake \
+    wget bzip2 curl software-properties-common sudo \
+    iputils-ping net-tools traceroute dnsutils nmap \
+    htop tcpdump vim \
+    gcc-12 g++-12 && \
+    dpkg-reconfigure -f noninteractive tzdata && \
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 100 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-12 100 && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user USERNAME
+RUN useradd -m -s /bin/bash $USERNAME
+
+# Switch to USERNAME user
+USER $USERNAME
+WORKDIR /home/$USERNAME
+
+# Set CUDA_HOME using CUDA_VERSION (remove patch version)
+ENV CUDA_HOME=/usr/local/cuda-${CUDA_VERSION%.*}
+
+# Add CUDA Toolkit to PATH
+ENV PATH=$CUDA_HOME/bin:$PATH
+ENV LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+ENV LIBRARY_PATH=$CUDA_HOME/lib64/stubs:$LIBRARY_PATH
+
+# Download and install Anaconda
+ENV CONDA_DIR=/home/$USERNAME/anaconda3
+
+# Add Anaconda to PATH
+ENV PATH=$CONDA_DIR/bin:$PATH
+
+RUN wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh -O anaconda.sh && \
+    bash anaconda.sh -b -p $CONDA_DIR && \
+    rm anaconda.sh && \
+    conda clean -afy
+
+# Initialize conda and update
+RUN conda init bash && \
+    conda config --add channels defaults && \
+    conda update -n base conda -y && \
+    conda clean -afy
+
+# Create conda environment VIRTUAL_ENV with Python 3.12
+RUN conda create -n $VIRTUAL_ENV python=3.12 -y && \
+    echo "conda activate $VIRTUAL_ENV" >> ~/.bashrc
+
+# Install PyTorch 2.8 with CUDA 12.9 support
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu129
+
+
+#################### xformers WHEEL BUILD IMAGE ####################
+FROM base AS build_xformers
+
+# Build xformers
+ARG XFORMERS_TAG=v0.0.31
+ENV TORCH_CUDA_ARCH_LIST=${torch_cuda_arch_list}
+
+ARG max_jobs_xformers=4
+ENV MAX_JOBS=${max_jobs_xformers}
+
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install ninja
+
+RUN echo 'git clone xformers...' && \
+    git clone https://github.com/facebookresearch/xformers.git --recursive && \
+    cd xformers && \
+    git checkout ${XFORMERS_TAG} && \
+    git submodule update --init --recursive && \
+    rm -rf build && \
+    echo 'finish git clone xformers...'
+
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    cd xformers && \
+    python3 setup.py bdist_wheel --dist-dir=../xformers-dist --verbose && \
+    cd .. && \
+    pip install xformers-dist/*.whl --verbose
+
+
+# Build flashinfer-ai v0.2.8rc1
+FROM base AS build_flashinfer
+
+ARG FLASHINFER_TAG="v0.2.8rc1"
+ARG torch_cuda_arch_list_flashinfer="7.5;8.0;8.6;8.7;8.9;9.0;10.0;10.1;10.3;12.0;12.1"
+ENV TORCH_CUDA_ARCH_LIST=${torch_cuda_arch_list_flashinfer}
+
+ARG max_jobs_flashinfer=2
+ENV MAX_JOBS=${max_jobs_flashinfer}
+
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install ninja && \
+    pip install build
+
+RUN echo 'git clone flashinfer ...' && \
+    git clone https://github.com/flashinfer-ai/flashinfer.git --recursive && \
+    cd flashinfer && \
+    git checkout ${FLASHINFER_TAG} && \
+    git submodule update --init --recursive && \
+    rm -rf build && \
+    echo 'finish git clone flashinfer ...'
+
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    cd flashinfer && \
+    python -m flashinfer.aot && \
+    python -m build --no-isolation --wheel --outdir ../flashinfer-dist --verbose && \
+    cd .. && \
+    pip install flashinfer-dist/*.whl --verbose
+
+
+# Build vllm wheel
+FROM base AS build_vllm
+
+ARG VLLM_TAG="v0.10.0"
+ENV TORCH_CUDA_ARCH_LIST=${torch_cuda_arch_list}
+
+ARG max_jobs_vllm=4
+ENV MAX_JOBS=${max_jobs_vllm}
+
+# Copy xformers-dist from build_xformers stage
+COPY --from=build_xformers /home/$USERNAME/xformers-dist /home/$USERNAME/xformers-dist
+
+# Install xformers
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install xformers-dist/*.whl --verbose
+
+# Copy flashinfer-dist from build_flashinfer stage
+COPY --from=build_flashinfer /home/$USERNAME/flashinfer-dist /home/$USERNAME/flashinfer-dist
+
+# Install flashinfer
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install flashinfer-dist/*.whl --verbose
+
+# git clone VLLM
+RUN echo 'git clone vllm ...' && \
+    git clone https://github.com/vllm-project/vllm.git && \
+    cd vllm && \
+    git checkout ${VLLM_TAG} && \
+    # Modify the Torch version in CMakeLists.txt
+    sed -i 's/set(TORCH_SUPPORTED_VERSION_CUDA "2.7.1")/set(TORCH_SUPPORTED_VERSION_CUDA "2.8.0")/' CMakeLists.txt && \
+    echo 'finish git clone vllm ...'
+
+# VLLM compile preparation 
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    cd vllm && \
+    python use_existing_torch.py && \
+    pip install -r requirements/build.txt
+
+# build VLLM 
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    cd vllm && \
+    # Clean any existing CMake artifacts
+    rm -rf .deps && \
+    mkdir -p .deps && \
+    python3 setup.py bdist_wheel --dist-dir=../vllm-dist --verbose && \
+    cd .. && \
+    pip install vllm-dist/*.whl --verbose
+
+CMD [ "bash" ]
+
+# Build cuda samples
+FROM base AS build_cuda_samples
+
+# git clone CUDA Samples and compile deviceQuery
+RUN echo 'git clone CUDA Samples ...' && \
+    git clone https://github.com/NVIDIA/cuda-samples.git && \
+    echo 'create build directory ...' && \
+    cd cuda-samples && \
+    mkdir build && \
+    cd build && \
+    echo 'create Makefile ...' && \
+    cmake .. && \
+    echo 'begin compiling deviceQuery ...' && \
+    make deviceQuery && \
+    make deviceQueryDrv && \
+    echo 'finish compiling deviceQuery ...'
+
+
+# Setup clean environment for vLLM
+FROM nvidia/cuda:12.9.1-devel-ubuntu24.04 AS vllm-base
+
+ARG TARGETPLATFORM
+ARG CUDA_VERSION=12.9.1
+ARG USERNAME=Razer
+ARG VIRTUAL_ENV=torch280_cuda129
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install tzdata, compilers, and essential tools
+RUN apt-get update && \
+    echo "tzdata tzdata/Areas select Asia" | debconf-set-selections && \
+    echo "tzdata tzdata/Zones/Asia select Singapore" | debconf-set-selections && \
+    apt-get install -y tzdata git build-essential cmake \
+    wget bzip2 curl software-properties-common sudo \
+    iputils-ping net-tools traceroute dnsutils nmap \
+    htop tcpdump vim file kmod iproute2 iptables \
+    gcc-12 g++-12 && \
+    dpkg-reconfigure -f noninteractive tzdata && \
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 100 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-12 100 && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user USERNAME
+RUN useradd -m -s /bin/bash $USERNAME
+RUN usermod -aG sudo $USERNAME
+RUN echo 'Razer ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+# Switch to USERNAME user
+USER $USERNAME
+WORKDIR /home/$USERNAME
+
+# Set CUDA_HOME using CUDA_VERSION (remove patch version)
+ENV CUDA_HOME=/usr/local/cuda-${CUDA_VERSION%.*}
+
+# Disable pip cache
+ENV PIP_NO_CACHE_DIR=true
+
+# Download and install Miniconda
+ENV CONDA_DIR=/home/$USERNAME/miniconda3
+
+# Add Miniconda to PATH
+ENV PATH=$CONDA_DIR/bin:$PATH
+
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O anaconda.sh && \
+    bash anaconda.sh -b -p $CONDA_DIR && \
+    rm anaconda.sh && \
+    conda clean -afy
+
+# Initialize conda and update
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r && \
+    conda init bash && \
+    conda config --add channels defaults && \
+    conda update -n base conda -y && \
+    conda clean -afy
+
+# Save conda base paths
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate base && \
+    echo "base PATH : $PATH" && \
+    echo "export CONDA_BASE_PATH=$PATH" >> ~/.bashrc && \
+    echo "export CONDA_BASE_LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> ~/.bashrc && \
+    echo "export CONDA_BASE_LIBRARY_PATH=$LIBRARY_PATH" >> ~/.bashrc
+
+# Create conda environment VIRTUAL_ENV with Python 3.12
+RUN conda create -n $VIRTUAL_ENV python=3.12 -y && \
+    echo "conda activate $VIRTUAL_ENV" >> ~/.bashrc
+
+ENV CONDA_VIRTUAL_ENV=$VIRTUAL_ENV
+
+# Install PyTorch 2.8 with CUDA 12.9 support
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu129
+
+# Copy xformers-dist from build_xformers stage
+COPY --from=build_xformers --chown=$USERNAME:$USERNAME /home/$USERNAME/xformers-dist /home/$USERNAME/xformers-dist
+
+# Install xformers
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install xformers-dist/*.whl --verbose && \
+    rm -rf xformers-dist
+
+# Copy flashinfer-dist from build_flashinfer stage
+COPY --from=build_flashinfer --chown=$USERNAME:$USERNAME /home/$USERNAME/flashinfer-dist /home/$USERNAME/flashinfer-dist
+
+# Install flashinfer
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install flashinfer-dist/*.whl --verbose && \
+    rm -rf flashinfer-dist
+
+# Copy vllm-dist from build_vllm stage
+COPY --from=build_vllm --chown=$USERNAME:$USERNAME /home/$USERNAME/vllm-dist /home/$USERNAME/vllm-dist
+
+# Install vllm
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install vllm-dist/*.whl --verbose && \
+    rm -rf vllm-dist
+
+# Install ray[all]
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    RAY_VERSION=$(python -c "import importlib.metadata; print(importlib.metadata.version('ray'))") && \
+    echo "Detected ray version: ${RAY_VERSION}" && \
+    pip install --no-cache-dir "ray[all]==${RAY_VERSION}"
+
+# Install audio package
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    VLLM_VERSION=$(python -c "import importlib.metadata; print(importlib.metadata.version('vllm'))") && \
+    echo "Detected VLLM version: ${VLLM_VERSION}" && \
+    pip install --no-cache-dir "vllm[audio]==${VLLM_VERSION}"
+
+# Install scripts
+COPY --chown=$USERNAME:$USERNAME scripts/ /home/$USERNAME/scripts/
+
+# Install pandas datasets
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install --no-cache-dir pandas && \
+    pip install --no-cache-dir datasets
+
+# Install benchmarks
+COPY --chown=$USERNAME:$USERNAME benchmarks/ /home/$USERNAME/benchmarks/
+
+# Install deviceQuery
+RUN echo 'create directory for deviceQuery ...' && \
+    sudo mkdir $CUDA_HOME/extras/demo_suite
+
+COPY --from=build_cuda_samples --chown=root:root /home/$USERNAME/cuda-samples/build/Samples/1_Utilities/deviceQuery/deviceQuery        $CUDA_HOME/extras/demo_suite/deviceQuery
+COPY --from=build_cuda_samples --chown=root:root /home/$USERNAME/cuda-samples/build/Samples/1_Utilities/deviceQueryDrv/deviceQueryDrv  $CUDA_HOME/extras/demo_suite/deviceQueryDrv
+
+# Install VIRTUAL_ENV activate and deactivate scripts
+COPY --chown=$USERNAME:$USERNAME conda/ $CONDA_DIR/envs/$VIRTUAL_ENV/etc/conda/
+
+ENTRYPOINT ["bash"]

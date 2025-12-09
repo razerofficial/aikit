@@ -1,0 +1,106 @@
+stages:
+  - test
+  - build
+  - publish
+
+test:
+  stage: test
+  tags: 
+    - saas-linux-2xlarge-amd64
+  image: docker:cli
+  services:
+    - docker:dind
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  script:
+    - /bin/sh docker_build_aikit/make.sh test
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+    - when: manual
+      allow_failure: true
+
+build-aikit:
+  stage: build
+  tags: 
+    - saas-linux-2xlarge-amd64
+  image: docker:cli
+  services:
+    - docker:dind
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - docker buildx create --name ci-builder --driver docker-container --driver-opt image=moby/buildkit:latest --use
+    - docker buildx inspect --bootstrap
+  script:
+    - /bin/sh docker_build_aikit/make.sh
+  artifacts:
+    paths:
+      - sbom.spdx.json
+      - docker_build_aikit/log.txt
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+    - when: manual
+      allow_failure: true
+
+# Manual job to copy image from GitLab to Docker Hub with attestations preserved
+publish-dockerhub:
+  stage: publish
+  tags: 
+    - saas-linux-2xlarge-amd64
+  image: docker:cli
+  services:
+    - docker:dind
+  before_script:
+    - apk add --no-cache jq
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+    - docker buildx create --name dockerhub-builder --driver docker-container --use
+    - docker buildx inspect --bootstrap
+  script:
+    - |
+      # Extract versions from SBOM artifact
+      echo "Extracting versions from SBOM..."
+      
+      # Get CUDA version from torch (extract from version like "2.8.0+cu129" -> "12.9")
+      CUDA_VERSION=$(jq -r '.packages[] | select(.name == "torch") | .versionInfo' sbom.spdx.json | sed -n 's/.*cu\([0-9][0-9]\)\([0-9]\).*/\1.\2/p' || echo "unknown")
+      
+      # Get Torch version (extract major.minor.patch from version like "2.8.0+cu129")
+      TORCH_VERSION=$(jq -r '.packages[] | select(.name == "torch") | .versionInfo' sbom.spdx.json | sed -n 's/^\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' || echo "unknown")
+      
+      # Get vllm version (extract major.minor.patch from version like "0.11.1.dev0+gb8b302cde.d20251023.cu129")
+      VLLM_VERSION=$(jq -r '.packages[] | select(.name == "vllm") | .versionInfo' sbom.spdx.json | sed -n 's/^\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' || echo "unknown")
+      
+      # Get aikit version from SBOM
+      AIKIT_VERSION=$(jq -r '.packages[] | select(.name == "rzr") | .versionInfo' sbom.spdx.json || echo "0.1.0")
+      
+      # Create combined version tag: cuda-torch-vllm-aikit
+      VERSION_TAG="cuda${CUDA_VERSION}-torch${TORCH_VERSION}-vllm${VLLM_VERSION}-aikit${AIKIT_VERSION}"
+      
+      echo "Detected versions:"
+      echo "  CUDA: ${CUDA_VERSION}"
+      echo "  Torch: ${TORCH_VERSION}"
+      echo "  vLLM: ${VLLM_VERSION}"
+      echo "  AIKit: ${AIKIT_VERSION}"
+      echo "  Combined tag: ${VERSION_TAG}"
+      
+      echo "Copying image from GitLab to Docker Hub with attestations..."
+      
+      docker buildx imagetools create \
+        --tag razerofficial/aikit:${VERSION_TAG} \
+        --tag razerofficial/aikit:latest \
+        $CI_REGISTRY_IMAGE/aikit:$CI_COMMIT_SHORT_SHA
+    - echo "Verifying attestations on Docker Hub..."
+    - docker buildx imagetools inspect razerofficial/aikit:latest
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: manual
+      allow_failure: true
+  needs:
+    - job: test
+      optional: false
+    - job: build-aikit
+      optional: false
+
+include:
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/Secret-Detection.gitlab-ci.yml

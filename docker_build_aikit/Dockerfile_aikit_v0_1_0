@@ -1,0 +1,126 @@
+# set base image for caching
+ARG VLLM_IMAGE=razer:vllm
+
+FROM ${VLLM_IMAGE} AS vllm_base
+USER Razer
+
+ENV OWNER=Razer
+ENV BASE_WORKDIR=/home/Razer
+ENV CONDA_DIR=${BASE_WORKDIR}/miniconda3
+ENV VIRTUAL_ENV=torch280_cuda129
+
+
+FROM vllm_base AS test
+
+# Build rzr-aikit wheel
+COPY --chown=$OWNER rzr-aikit $BASE_WORKDIR/src
+SHELL ["/bin/bash", "-c"]
+RUN source "${CONDA_DIR}/etc/profile.d/conda.sh" \
+ && conda activate "${VIRTUAL_ENV}" \
+ && cd src \
+ && pip install -e . \
+ && pip install pytest pytest-mock \
+ && cd tests \
+ && pytest model
+
+
+FROM vllm_base AS rzr-aikit_base
+
+# Build rzr-aikit wheel
+COPY --chown=$OWNER rzr-aikit $BASE_WORKDIR/src
+
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install build && \
+    pip install 'poetry-core>=1.0.0' &&  \
+    cd src && \
+    python -m build --no-isolation --wheel --outdir ../rzr-aikit-dist --verbose && \
+    echo "rzr-aikit wheel is built ..." && \
+    cd .. && \
+    pip install rzr-aikit-dist/*.whl --verbose && \
+    echo "rzr-aikit wheel is installed ..."
+
+
+# build jupyter homepage extension
+FROM rzr-aikit_base AS build_jupyter_home
+COPY --chown=Razer:Razer jupyter_extension /home/Razer/notebooks/jupyter_extension
+
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install build jupyterlab hatchling hatch-nodejs-version hatch-jupyter-builder && \
+    conda install conda-forge:nodejs && \
+    echo 'building jupyter extension ...' && \
+    cd notebooks/jupyter_extension && \
+    jlpm install && \
+    jlpm build:prod && \
+    python -m build --no-isolation --wheel --outdir ../../rzr-home-dist --verbose
+
+
+# Setup clean environment for rzr-aikit
+FROM vllm_base AS rzr-aikit
+
+# Copy rzr-aikit-dist from rzr-aikit_base stage
+COPY --from=rzr-aikit_base --chown=$OWNER /home/$OWNER/rzr-aikit-dist /home/$OWNER/rzr-aikit-dist
+
+# Install rzr-aikit
+SHELL ["/bin/bash", "-c"]
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install rzr-aikit-dist/*.whl --verbose && \
+    rm -rf rzr-aikit-dist
+
+# Install JupyterLab and copy Notebooks
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install --no-cache-dir jupyterlab bash_kernel && \
+    python -m bash_kernel.install
+
+ENV JUPYTER_NOTEBOOK_DIR="/home/$OWNER/notebooks/"
+COPY --chown=$OWNER notebooks/ "${JUPYTER_NOTEBOOK_DIR}/"
+
+# Install GPU automation (light) scripts
+COPY --chown=$OWNER rzr-aikit/util/gpu_*.py $CONDA_DIR/envs/$VIRTUAL_ENV/bin/
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    chmod +x $CONDA_DIR/envs/$VIRTUAL_ENV/bin/gpu_*.py && \
+    ln -s $CONDA_DIR/envs/$VIRTUAL_ENV/bin/gpu_discover.py $CONDA_DIR/envs/$VIRTUAL_ENV/bin/gpu-discover && \
+    ln -s $CONDA_DIR/envs/$VIRTUAL_ENV/bin/gpu_select.py $CONDA_DIR/envs/$VIRTUAL_ENV/bin/gpu-select && \
+    ln -s $CONDA_DIR/envs/$VIRTUAL_ENV/bin/gpu_filter.py $CONDA_DIR/envs/$VIRTUAL_ENV/bin/gpu-filter
+
+# Install LlamaFactory for fine-tuning
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    cd $BASE_WORKDIR && \
+    git clone --depth 1 https://github.com/hiyouga/LLaMA-Factory.git && \
+    cd LLaMA-Factory && \
+    pip install ".[torch,metrics]" --no-build-isolation && \
+    pip install --no-cache-dir bitsandbytes && \
+    cd .. && \
+    rm -rf LLaMA-Factory
+
+# Copy jupyter custom extension into final rzr-aikit image
+COPY --from=build_jupyter_home --chown=$OWNER /home/$OWNER/rzr-home-dist /home/$OWNER/rzr-home-dist
+
+# Disable default jupyter launcher and set dark theme by default
+RUN source $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate $VIRTUAL_ENV && \
+    pip install rzr-home-dist/*.whl --verbose && \
+    rm -rf rzr-home-dist && \
+    jupyter labextension disable @jupyterlab/launcher-extension && \
+    mkdir -p ~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/ && \
+    echo '{"theme": "JupyterLab Dark"}' > ~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
+
+# TEMP: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default). To enable this behavior and turn off this error message
+RUN echo "export RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO=0" >> ~/.bashrc
+
+# TEMP: Ray uses cache to store current cluster info, which may cause issues when restarting the container.
+RUN echo "rm -f /tmp/ray/ray_current_cluster" >> ~/.bashrc
+
+# TEMP: Re-install scripts
+COPY --chown=$OWNER:$OWNER docker_build_vllm/scripts/ /home/$OWNER/scripts/
+
+# TODO - Establish a unififed startup script and include it inside .bashrc
+# RUN echo "/home/Razer/scripts/startup" >> .bashrc
+# ENV BASH_ENV="/home/Razer/scripts/startup"

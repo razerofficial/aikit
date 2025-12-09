@@ -1,0 +1,10 @@
+@import url('base.css');
+
+:root {
+  --jp-brand-color1: #44d62c;  /* Razer green */
+  --jp-layout-color1: #000000; /* Pure black background */
+  --jp-layout-color2: #111111; /* Dark gray */
+  --jp-layout-color3: #222222; /* Medium gray */
+  --jp-ui-font-color1: #ffffff; /* White text */
+  --jp-accent-color1: #44d62c;  /* Razer green accent */
+}

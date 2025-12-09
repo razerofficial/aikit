@@ -1,0 +1,14 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v4.4.0
+_src_path: https://github.com/jupyterlab/extension-template
+author_email: matthew.gong@razer.com
+author_name: Matthew Gong
+has_binder: false
+has_settings: true
+kind: frontend
+labextension_name: rzr-home
+project_short_description: A JupyterLab extension for a Razer themed homepage.
+python_name: rzr_home
+repository: https://github.com/matthewg-21/razer-jupyterlab-extension
+test: false
+

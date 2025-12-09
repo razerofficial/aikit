@@ -1,0 +1,269 @@
+#!/bin/bash
+
+# --- Function to display usage message ---
+usage() {
+    echo
+    echo "Usage: $(basename "$0") [OPTIONS] [VLLM_SERVE_EXTRA_ARGS...]"
+    echo
+    echo "Starts the VLLM server with configurations sourced from .vllmenv, environment variables and command-line arguments."
+    echo "Command-line arguments take the highest precedence. Arguments can be passed as '--option value' or '--option=value'."
+    echo
+    echo "OPTIONS to set/override .vllmenv variables and specific environment variables:"
+    echo "  --nccl-debug <value>                Set NCCL_DEBUG (Default: ${NCCL_DEBUG_DEFAULT:-TRACE})"
+    echo "  --vllm-logging-level <value>        Set VLLM_LOGGING_LEVEL (Default: ${VLLM_LOGGING_LEVEL_DEFAULT:-DEBUG})"
+    echo "  --nccl-async-error-handling <0|1>   Set NCCL_ASYNC_ERROR_HANDLING (Default: ${NCCL_ASYNC_ERROR_HANDLING_DEFAULT:-1})"
+    echo "  --model-path <path>                 Set MODEL_PATH (Default: ${MODEL_PATH_DEFAULT:-deepseek-ai/DeepSeek-R1-Distill-Llama-8B})"
+    echo "  --served-model-name <name>          Set SERVED_MODEL_NAME (Default: ${SERVED_MODEL_NAME_DEFAULT:-deepseek-ai/DeepSeek-R1-Distill-Llama-8B})"
+    echo "                                      If this name includes 'DeepSeek-R1', reasoning options will be auto-enabled."
+    echo "  --port <port_num>                   Set PORT for VLLM server (Default: ${PORT_DEFAULT:-8000})"
+    echo "  --max-model-len <length>            Set MAX_MODEL_LEN (Default: ${MAX_MODEL_LEN_DEFAULT:-32766})"
+    echo "  --max-num-seqs <num>                Set MAX_NUM_SEQS (Default: ${MAX_NUM_SEQS_DEFAULT:-5})"
+    echo "  --gpu-memory-utilization <ratio>    Set GPU_MEMORY_UTILIZATION (Default: ${GPU_MEMORY_UTILIZATION_DEFAULT:-0.98})"
+    echo "  --tensor-parallel-size <num>        Set TENSOR_PARALLEL_SIZE (Default: ${TENSOR_PARALLEL_SIZE_DEFAULT:-1})"
+    echo "  --pipeline-parallel-size <num>      Set PIPELINE_PARALLEL_SIZE (Default: ${PIPELINE_PARALLEL_SIZE_DEFAULT:-1})"
+    echo "  --log-file <path>                   Set LOG_FILE path (Default: ${LOG_FILE_DEFAULT:-~/vllm_docker.log})"
+    echo
+    echo "Special environment variable OPTIONS:"
+    echo "  --cuda-visible-devices <device_ids> Set CUDA_VISIBLE_DEVICES environment variable (e.g., \"0\" or \"0,1\")"
+    echo "  --vllm-pp-layer-partition <config>  Set VLLM_PP_LAYER_PARTITION environment variable (e.g., \"10,20,22\")"
+    echo
+    echo "Other OPTIONS:"
+    echo "  --help                              Show this usage message and exit."
+    echo
+    echo "VLLM_SERVE_EXTRA_ARGS:"
+    echo "  Any other options provided (e.g., --swap-space 16, --disable-log-stats) will be passed"
+    echo "  directly to the 'vllm serve' command. These can also override automatically added options"
+    echo "  (like reasoning flags for DeepSeek-R1 models)."
+    echo
+    echo "Configuration precedence:"
+    echo "  1. Command-line arguments (highest)"
+    echo "  2. .vllmenv file"
+    echo "  3. Script internal defaults (lowest)"
+    echo
+    echo "The script will attempt to source '.vllmenv' from the current directory or the script's directory."
+    echo
+}
+
+# --- Default values (can be overridden by .vllmenv and then by arguments) ---
+NCCL_DEBUG_DEFAULT="TRACE"
+VLLM_LOGGING_LEVEL_DEFAULT="DEBUG"
+NCCL_ASYNC_ERROR_HANDLING_DEFAULT="1"
+MODEL_PATH_DEFAULT="deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+SERVED_MODEL_NAME_DEFAULT="deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+PORT_DEFAULT="8000"
+MAX_MODEL_LEN_DEFAULT="32766"
+MAX_NUM_SEQS_DEFAULT="5"
+GPU_MEMORY_UTILIZATION_DEFAULT="0.98"
+TENSOR_PARALLEL_SIZE_DEFAULT="1"
+PIPELINE_PARALLEL_SIZE_DEFAULT="1"
+LOG_FILE_DEFAULT="~/vllm_docker.log"
+
+# --- Check for help option first ---
+for arg in "$@"; do
+    if [[ "$arg" == "--help" ]]; then
+        usage
+        exit 0
+    fi
+done
+
+# --- Source the environment variables from .vllmenv file ---
+echo
+if [ -f .vllmenv ]; then
+    echo "Sourcing environment variables from .vllmenv"
+    source ./.vllmenv
+elif [ -f "$(dirname "$0")/.vllmenv" ]; then
+    echo "Sourcing environment variables from $(dirname "$0")/.vllmenv"
+    source "$(dirname "$0")/.vllmenv"
+else
+    echo "Warning: .vllmenv file not found. Using script defaults or command-line arguments."
+fi
+echo
+
+# Apply defaults if variables are not set (by .vllmenv or already in env)
+NCCL_DEBUG=${NCCL_DEBUG:-$NCCL_DEBUG_DEFAULT}
+VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-$VLLM_LOGGING_LEVEL_DEFAULT}
+NCCL_ASYNC_ERROR_HANDLING=${NCCL_ASYNC_ERROR_HANDLING:-$NCCL_ASYNC_ERROR_HANDLING_DEFAULT}
+MODEL_PATH=${MODEL_PATH:-$MODEL_PATH_DEFAULT}
+SERVED_MODEL_NAME=${SERVED_MODEL_NAME:-$SERVED_MODEL_NAME_DEFAULT}
+PORT=${PORT:-$PORT_DEFAULT}
+MAX_MODEL_LEN=${MAX_MODEL_LEN:-$MAX_MODEL_LEN_DEFAULT}
+MAX_NUM_SEQS=${MAX_NUM_SEQS:-$MAX_NUM_SEQS_DEFAULT}
+GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-$GPU_MEMORY_UTILIZATION_DEFAULT}
+TENSOR_PARALLEL_SIZE=${TENSOR_PARALLEL_SIZE:-$TENSOR_PARALLEL_SIZE_DEFAULT}
+PIPELINE_PARALLEL_SIZE=${PIPELINE_PARALLEL_SIZE:-$PIPELINE_PARALLEL_SIZE_DEFAULT}
+LOG_FILE=${LOG_FILE:-$LOG_FILE_DEFAULT}
+
+
+# --- Parse Command Line Arguments ---
+VLLM_SERVE_EXTRA_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help)
+            usage; exit 0 ;;
+
+        --nccl-debug)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --nccl-debug requires an argument." >&2; usage; exit 1; fi
+            NCCL_DEBUG="$2"; shift 2 ;;
+        --nccl-debug=*)
+            VALUE="${1#--nccl-debug=}"; if [[ -z "$VALUE" ]]; then echo "Error: --nccl-debug requires a value after '='." >&2; usage; exit 1; fi
+            NCCL_DEBUG="$VALUE"; shift ;;
+
+        --vllm-logging-level)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --vllm-logging-level requires an argument." >&2; usage; exit 1; fi
+            VLLM_LOGGING_LEVEL="$2"; shift 2 ;;
+        --vllm-logging-level=*)
+            VALUE="${1#--vllm-logging-level=}"; if [[ -z "$VALUE" ]]; then echo "Error: --vllm-logging-level requires a value after '='." >&2; usage; exit 1; fi
+            VLLM_LOGGING_LEVEL="$VALUE"; shift ;;
+
+        --nccl-async-error-handling)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --nccl-async-error-handling requires an argument." >&2; usage; exit 1; fi
+            NCCL_ASYNC_ERROR_HANDLING="$2"; shift 2 ;;
+        --nccl-async-error-handling=*)
+            VALUE="${1#--nccl-async-error-handling=}"; if [[ -z "$VALUE" ]]; then echo "Error: --nccl-async-error-handling requires a value after '='." >&2; usage; exit 1; fi
+            NCCL_ASYNC_ERROR_HANDLING="$VALUE"; shift ;;
+
+        --model-path)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --model-path requires an argument." >&2; usage; exit 1; fi
+            MODEL_PATH="$2"; shift 2 ;;
+        --model-path=*)
+            VALUE="${1#--model-path=}"; if [[ -z "$VALUE" ]]; then echo "Error: --model-path requires a value after '='." >&2; usage; exit 1; fi
+            MODEL_PATH="$VALUE"; shift ;;
+
+        --served-model-name)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --served-model-name requires an argument." >&2; usage; exit 1; fi
+            SERVED_MODEL_NAME="$2"; shift 2 ;;
+        --served-model-name=*)
+            VALUE="${1#--served-model-name=}"; if [[ -z "$VALUE" ]]; then echo "Error: --served-model-name requires a value after '='." >&2; usage; exit 1; fi
+            SERVED_MODEL_NAME="$VALUE"; shift ;;
+
+        --port)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --port requires an argument." >&2; usage; exit 1; fi
+            PORT="$2"; shift 2 ;;
+        --port=*)
+            VALUE="${1#--port=}"; if [[ -z "$VALUE" ]]; then echo "Error: --port requires a value after '='." >&2; usage; exit 1; fi
+            PORT="$VALUE"; shift ;;
+
+        --max-model-len)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --max-model-len requires an argument." >&2; usage; exit 1; fi
+            MAX_MODEL_LEN="$2"; shift 2 ;;
+        --max-model-len=*)
+            VALUE="${1#--max-model-len=}"; if [[ -z "$VALUE" ]]; then echo "Error: --max-model-len requires a value after '='." >&2; usage; exit 1; fi
+            MAX_MODEL_LEN="$VALUE"; shift ;;
+
+        --max-num-seqs)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --max-num-seqs requires an argument." >&2; usage; exit 1; fi
+            MAX_NUM_SEQS="$2"; shift 2 ;;
+        --max-num-seqs=*)
+            VALUE="${1#--max-num-seqs=}"; if [[ -z "$VALUE" ]]; then echo "Error: --max-num-seqs requires a value after '='." >&2; usage; exit 1; fi
+            MAX_NUM_SEQS="$VALUE"; shift ;;
+
+        --gpu-memory-utilization)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --gpu-memory-utilization requires an argument." >&2; usage; exit 1; fi
+            GPU_MEMORY_UTILIZATION="$2"; shift 2 ;;
+        --gpu-memory-utilization=*)
+            VALUE="${1#--gpu-memory-utilization=}"; if [[ -z "$VALUE" ]]; then echo "Error: --gpu-memory-utilization requires a value after '='." >&2; usage; exit 1; fi
+            GPU_MEMORY_UTILIZATION="$VALUE"; shift ;;
+
+        --tensor-parallel-size)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --tensor-parallel-size requires an argument." >&2; usage; exit 1; fi
+            TENSOR_PARALLEL_SIZE="$2"; shift 2 ;;
+        --tensor-parallel-size=*)
+            VALUE="${1#--tensor-parallel-size=}"; if [[ -z "$VALUE" ]]; then echo "Error: --tensor-parallel-size requires a value after '='." >&2; usage; exit 1; fi
+            TENSOR_PARALLEL_SIZE="$VALUE"; shift ;;
+
+        --pipeline-parallel-size)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --pipeline-parallel-size requires an argument." >&2; usage; exit 1; fi
+            PIPELINE_PARALLEL_SIZE="$2"; shift 2 ;;
+        --pipeline-parallel-size=*)
+            VALUE="${1#--pipeline-parallel-size=}"; if [[ -z "$VALUE" ]]; then echo "Error: --pipeline-parallel-size requires a value after '='." >&2; usage; exit 1; fi
+            PIPELINE_PARALLEL_SIZE="$VALUE"; shift ;;
+
+        --log-file)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --log-file requires an argument." >&2; usage; exit 1; fi
+            LOG_FILE="$2"; shift 2 ;;
+        --log-file=*)
+            VALUE="${1#--log-file=}"; if [[ -z "$VALUE" ]]; then echo "Error: --log-file requires a value after '='." >&2; usage; exit 1; fi
+            LOG_FILE="$VALUE"; shift ;;
+
+        --cuda-visible-devices)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --cuda-visible-devices requires an argument (e.g., \"0\" or \"0,1\")." >&2; usage; exit 1; fi
+            export CUDA_VISIBLE_DEVICES="$2"; shift 2 ;;
+        --cuda-visible-devices=*)
+            VALUE="${1#--cuda-visible-devices=}"; if [[ -z "$VALUE" ]]; then echo "Error: --cuda-visible-devices requires a value after '=' (e.g., \"0\" or \"0,1\")." >&2; usage; exit 1; fi
+            export CUDA_VISIBLE_DEVICES="$VALUE"; shift ;;
+
+        --vllm-pp-layer-partition)
+            if [[ -z "$2" || "$2" == -* ]]; then echo "Error: --vllm-pp-layer-partition requires an argument (e.g., \"10,20,22\")." >&2; usage; exit 1; fi
+            export VLLM_PP_LAYER_PARTITION="$2"; shift 2 ;;
+        --vllm-pp-layer-partition=*)
+            VALUE="${1#--vllm-pp-layer-partition=}"; if [[ -z "$VALUE" ]]; then echo "Error: --vllm-pp-layer-partition requires a value after '=' (e.g., \"10,20,22\")." >&2; usage; exit 1; fi
+            export VLLM_PP_LAYER_PARTITION="$VALUE"; shift ;;
+
+        *) # Collect any other arguments to pass through to vllm serve
+            VLLM_SERVE_EXTRA_ARGS+=("$1"); shift ;;
+    esac
+done
+
+# --- Set environment variables based on final values ---
+export NCCL_DEBUG
+export VLLM_LOGGING_LEVEL
+export NCCL_ASYNC_ERROR_HANDLING
+# CUDA_VISIBLE_DEVICES and VLLM_PP_LAYER_PARTITION are already exported if provided
+
+# Expand tilde for LOG_FILE
+LOG_FILE_EXPANDED=$(eval echo "$LOG_FILE")
+
+# --- Determine automatic reasoning arguments ---
+AUTO_REASONING_ARGS=()
+if [[ "$SERVED_MODEL_NAME" == *DeepSeek-R1* ]]; then
+    echo "INFO: SERVED_MODEL_NAME ('$SERVED_MODEL_NAME') includes 'DeepSeek-R1'."
+    echo "INFO: Automatically adding --enable-reasoning and --reasoning-parser deepseek_r1."
+    echo "      You can override these by passing them explicitly (e.g., --reasoning-parser other_parser)."
+    AUTO_REASONING_ARGS+=("--enable-reasoning")
+    AUTO_REASONING_ARGS+=("--reasoning-parser" "deepseek_r1")
+fi
+
+# --- Check Effective ENV settings ---
+echo
+echo "--- Effective Environment Settings ---"
+echo "NCCL_DEBUG=$NCCL_DEBUG"
+echo "VLLM_LOGGING_LEVEL=$VLLM_LOGGING_LEVEL"
+echo "NCCL_ASYNC_ERROR_HANDLING=$NCCL_ASYNC_ERROR_HANDLING"
+echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-<Not Set>}"
+echo "VLLM_PP_LAYER_PARTITION=${VLLM_PP_LAYER_PARTITION:-<Not Set>}"
+echo
+
+# --- Check Effective VLLM settings (from variables) ---
+echo "--- Effective VLLM Configuration ---"
+echo "MODEL_PATH=$MODEL_PATH"
+echo "SERVED_MODEL_NAME=$SERVED_MODEL_NAME"
+echo "PORT=$PORT"
+echo "MAX_MODEL_LEN=$MAX_MODEL_LEN"
+echo "MAX_NUM_SEQS=$MAX_NUM_SEQS"
+echo "GPU_MEMORY_UTILIZATION=$GPU_MEMORY_UTILIZATION"
+echo "TENSOR_PARALLEL_SIZE=$TENSOR_PARALLEL_SIZE"
+echo "PIPELINE_PARALLEL_SIZE=$PIPELINE_PARALLEL_SIZE"
+echo "LOG_FILE=$LOG_FILE_EXPANDED"
+if [ ${#AUTO_REASONING_ARGS[@]} -gt 0 ]; then
+    echo "Automatically added vLLM arguments: ${AUTO_REASONING_ARGS[*]}"
+fi
+if [ ${#VLLM_SERVE_EXTRA_ARGS[@]} -gt 0 ]; then
+    echo "User-provided vLLM serve extra arguments: ${VLLM_SERVE_EXTRA_ARGS[*]}"
+fi
+echo
+
+
+# --- Start VLLM ---
+echo "Starting VLLM server..."
+vllm serve "$MODEL_PATH" \
+    --served-model-name "$SERVED_MODEL_NAME" \
+    --port "$PORT" \
+    --max-model-len "$MAX_MODEL_LEN" \
+    --max-num-seqs "$MAX_NUM_SEQS" \
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
+    --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
+    --pipeline-parallel-size "$PIPELINE_PARALLEL_SIZE" \
+    "${AUTO_REASONING_ARGS[@]}" \
+    "${VLLM_SERVE_EXTRA_ARGS[@]}" \
+    2>&1 | tee "$LOG_FILE_EXPANDED"
+
