@@ -3,8 +3,8 @@
 # RAZER AIKIT
 
 
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/razer/aikit)](https://github.com/razerofficial/aikit/releases)
-[![Docker Pulls](https://img.shields.io/docker/pulls/razer/ai_sdk)](https://hub.docker.com/r/razerofficial/aikit)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/razerofficial/aikit)](https://github.com/razerofficial/aikit/releases)
+[![Docker Pulls](https://img.shields.io/docker/pulls/razerofficial/aikit)](https://hub.docker.com/r/razerofficial/aikit)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-available-brightgreen)](docs/)
 
