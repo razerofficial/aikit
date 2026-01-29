@@ -186,16 +186,25 @@ def start_server(engine):
     Start the VLLM server with the given engine.
     """
     try:
+        import re
+        route_regex = re.compile(r'INFO\s+\S+:\d+:\s*(.*)')
+        start_regex = re.compile(r'INFO:\s*(.*)')
+
         process = engine.serve()
         start_print = False
         while True:
             piped_output = process.stdout.readline()
-            if not piped_output and piped_output.poll() is not None:
+            if "Max retries exceeded" in piped_output:
+                raise Exception("Unable to establish connection to huggingface.co")
+            if not piped_output and process.poll() is not None:
                 break
             if "Starting vLLM API server" in piped_output:
                 start_print = True
             if start_print:
-                console.print(piped_output, end="")
+                extracted = route_regex.search(piped_output)
+                if not extracted:
+                    extracted = start_regex.search(piped_output)
+                console.print(extracted.group(1))
             if "Application startup complete" in piped_output:
                 console.print(
                     "\nPlease use 'rzr-aikit model generate' to start generating responses."

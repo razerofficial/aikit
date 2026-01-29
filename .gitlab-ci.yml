@@ -41,7 +41,7 @@ build-aikit:
     - when: manual
       allow_failure: true
 
-# Manual job to copy image from GitLab to Docker Hub with attestations preserved
+# Manual job to copy image from GitLab to Docker Hub with version tag
 publish-dockerhub:
   stage: publish
   tags: 
@@ -82,14 +82,19 @@ publish-dockerhub:
       echo "  AIKit: ${AIKIT_VERSION}"
       echo "  Combined tag: ${VERSION_TAG}"
       
-      echo "Copying image from GitLab to Docker Hub with attestations..."
+      echo "Copying image from GitLab to Docker Hub with version tag..."
       
       docker buildx imagetools create \
         --tag razerofficial/aikit:${VERSION_TAG} \
-        --tag razerofficial/aikit:latest \
         $CI_REGISTRY_IMAGE/aikit:$CI_COMMIT_SHORT_SHA
+      
+      # Save version tag for next job
+      echo "VERSION_TAG=${VERSION_TAG}" > version.env
     - echo "Verifying attestations on Docker Hub..."
-    - docker buildx imagetools inspect razerofficial/aikit:latest
+    - docker buildx imagetools inspect razerofficial/aikit:${VERSION_TAG}
+  artifacts:
+    reports:
+      dotenv: version.env
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
     - when: manual
@@ -98,6 +103,35 @@ publish-dockerhub:
     - job: test
       optional: false
     - job: build-aikit
+      optional: false
+
+# Manual job to retag versioned image as latest
+publish-latest:
+  stage: publish
+  tags: 
+    - saas-linux-2xlarge-amd64
+  image: docker:cli
+  services:
+    - docker:dind
+  before_script:
+    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+    - docker buildx create --name latest-builder --driver docker-container --use
+    - docker buildx inspect --bootstrap
+  script:
+    - |
+      echo "Retagging razerofficial/aikit:${VERSION_TAG} as latest..."
+      
+      docker buildx imagetools create \
+        --tag razerofficial/aikit:latest \
+        razerofficial/aikit:${VERSION_TAG}
+    - echo "Verifying latest tag on Docker Hub..."
+    - docker buildx imagetools inspect razerofficial/aikit:latest
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: manual
+      allow_failure: true
+  needs:
+    - job: publish-dockerhub
       optional: false
 
 include:

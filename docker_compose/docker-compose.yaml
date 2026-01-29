@@ -1,0 +1,133 @@
+# =============================================================================
+# Razer AIKit - Head Node Docker Compose Configuration
+# =============================================================================
+# This compose file sets up a complete AIKit head node environment with:
+#   - Ray cluster head node with metrics export
+#   - Prometheus for metrics collection
+#   - Grafana for visualization and monitoring
+#   - Open WebUI for conversational AI interface
+#   - JupyterLab for interactive development
+#
+# Usage:
+#   docker compose up -d                    # Start all services
+#   docker compose down                     # Stop all services
+#   docker compose logs -f <service_name>   # View logs
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Prometheus - Metrics Collection and Storage
+  # ---------------------------------------------------------------------------
+  # Prometheus collects and stores time-series metrics from Ray and vLLM
+  # Access: http://localhost:9090
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    network_mode: host
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Grafana - Metrics Visualization and Dashboards
+  # ---------------------------------------------------------------------------
+  # Grafana provides real-time visualization of Ray cluster and vLLM metrics
+  # Access: http://localhost:3000 (login: admin/admin)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    network_mode: host
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    environment:
+      # Authentication settings (change for production)
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      # Persistent storage for Grafana data
+      - grafana-storage:/var/lib/grafana
+      # Dashboard and configuration files
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/dashboards/grafana.ini:/etc/grafana/grafana.ini
+    depends_on:
+      - prometheus
+
+  # ---------------------------------------------------------------------------
+  # Razer AIKit - Ray Cluster Head Node
+  # ---------------------------------------------------------------------------
+  # The main AIKit container running as the Ray cluster head node
+  # Services:
+  #   - Ray head node (port 6379, 8265)
+  #   - Ray metrics exporter (port 8080)
+  #   - JupyterLab (port 8888, no authentication)
+  #   - vLLM inference server (port 8000, when started)
+  rzr-aikit:
+    image: razerofficial/aikit:latest
+    container_name: rzr-aikit
+    network_mode: host
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    ipc: host
+    entrypoint: ["bash", "-i"]
+    command: >
+      -c "source /home/Razer/miniconda3/etc/profile.d/conda.sh &&
+      conda activate torch291_cuda129 &&
+      rzr-aikit cluster run --metrics-export-port 8080 &&
+      jupyter lab --NotebookApp.token='' --NotebookApp.password='' --ip=0.0.0.0 --port=8888 "
+    environment:
+      # HuggingFace token for model downloads (set in .env file or shell)
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
+    volumes:
+      # Cache HuggingFace models locally
+      - $HOME/.cache/huggingface:/home/Razer/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  # Open WebUI - Conversational AI Interface
+  # ---------------------------------------------------------------------------
+  # Web-based chat interface for interacting with vLLM models
+  # Access: http://localhost:1919 (no authentication required)
+  # Note: Requires vLLM server running on port 8000
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: openwebui
+    network_mode: host
+    environment:
+      # OpenAI-compatible API endpoint (vLLM)
+      - OPENAI_API_BASE_URL=http://localhost:8000/v1
+      - OPENAI_API_KEY=sk-dummy
+      # Authentication disabled for local development
+      - WEBUI_AUTH=false
+      # Custom port to avoid conflicts
+      - PORT=1919
+      - DEFAULT_USER_ROLE=admin
+    volumes:
+      # Persist chat history and settings
+      - openwebui-data:/app/backend/data
+    restart: unless-stopped
+
+# =============================================================================
+# Named Volumes - Persistent Data Storage
+# =============================================================================
+volumes:
+  grafana-storage:
+    name: grafana-storage
+  grafana-dashboards:
+    name: grafana-dashboards
+  openwebui-data:
+    name: openwebui-data
+

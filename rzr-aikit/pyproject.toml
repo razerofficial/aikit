@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "rzr"
-version = "0.1.0"
+version = "0.2.0"
 description = "A package for Razer GPU compute and AI services"
 authors = ["Razer Inc."]
 license = "Apache-2.0"
@@ -11,15 +11,15 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "~3.12" # vllm wants this stricter constraint
-typer = "^0.19.2"
+typer = ">0.19.2"
 numpy = "^2.1.2"
 psutil = "^7.0.0"
 transformers = "^4.51.3"
 accelerate = "^1.7.0"
-nvidia-ml-py = "^12.575.51"
-prometheus-client = "^0.22.1"
+nvidia-ml-py = ">12.575.51"
+prometheus-client = ">0.22.1"
 typing-extensions = "^4.14.1"
-openai = "^1.97.1"
+openai = ">1.97.1"
 humanize = "^4.14.0"
 
 

@@ -2,26 +2,9 @@
 
 This document contains common issues you might encounter when using Razer AIKit and their corresponding solutions.
 
-## GPU and Hardware Issues
-
-### 1. NVIDIA Compute Capability Below 8.0
-
-**Problem**: Models fail to run on older NVIDIA GPUs with compute capability below 8.0.
-
-**Solution**: Disable FlashInfer sampler by setting the environment variable before running Razer AIKit:
-
-```bash
-export VLLM_USE_FLASHINFER_SAMPLER=0
-rzr-aikit model run <your-model>
-```
-
-**Affected Hardware**: GTX 10 series, RTX 20 series, and some older GPUs.
-
----
-
 ## Memory and Performance Issues
 
-### 2. Windows with VRAM Less Than 10GB
+### 1. Windows with VRAM Less Than 10GB
 
 **Problem**: Out of memory errors or poor performance on Windows systems with limited VRAM.
 
@@ -37,20 +20,29 @@ rzr-aikit model run <your-model> --gpu-memory-utilization 0.8
 
 ## Platform-Specific Issues
 
-### 3. Windows Inference Not Working
+### 2. Windows Inference Not Working
 
-**Problem**: Model inference fails to start or is not accessible on Windows.
+**Problem**: The AIKit model runs successfully, but inference commands like `rzr-aikit model generate` fail or port 8000 is not accessible for inferencing.
 
-**Solution**: Start a local HTTP server to properly expose the inference endpoint:
+**Symptoms**:
+- Model starts and loads without errors
+- `rzr-aikit model generate` commands fail or hang
+- Cannot connect to port 8000 for inference requests
+
+**Solution**: After the model run completes but before running generate commands, run the following command to trigger the network connection:
 
 ```bash
 python -m http.server --bind 0.0.0.0 8000
 ```
 
+**Expected behavior**: The command will return an error indicating that port 8000 is already in use by vLLM (this is normal). After running this command, the connection to vLLM on port 8000 should become accessible.
+
 **Additional Notes**: 
 - This is typically needed when running in WSL2 on Windows
+- Run this command after `rzr-aikit model run` completes successfully
+- The error about port 8000 being occupied is expected and indicates vLLM is running
+- After the error appears, you can proceed with `rzr-aikit model generate` commands
 - Ensure Windows Firewall allows the connection if needed
-- The server will be accessible at `http://localhost:8000`
 
 ---
 
@@ -58,7 +50,7 @@ python -m http.server --bind 0.0.0.0 8000
 
 If you encounter issues not covered here:
 
-1. Check the [GitHub Issues](https://github.com/razer/aikit/issues) for similar problems
+1. Check the [GitHub Issues](https://github.com/razerofficial/aikit/issues) for similar problems
 2. Review the [setup documentation](setup.md) for installation requirements
 3. Create a new issue with detailed information about your system and the error
 

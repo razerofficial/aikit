@@ -8,7 +8,7 @@ import argparse
 
 from vllm import EngineArgs, LLMEngine
 from vllm.config import VllmConfig
-from vllm.utils import FlexibleArgumentParser
+from vllm.utils.argparse_utils import FlexibleArgumentParser
 
 def get_vllm_engine_version() -> str:
     """
@@ -55,8 +55,8 @@ def main() -> int:
         engine = LLMEngine.from_engine_args(eng_args)
 
         # h.  Ask the scheduler what context length it finally decided on.
-        vllm_config : VllmConfig = engine.get_vllm_config()
-        RAZER_MAX_MODEL_LEN = vllm_config.scheduler_config.max_model_len
+        vllm_config = engine.vllm_config
+        RAZER_MAX_MODEL_LEN = vllm_config.model_config.max_model_len
         RAZER_MAX_NUM_SEQS = vllm_config.scheduler_config.max_num_seqs
         RAZER_MAX_NUM_BATCHED_TOKENS = vllm_config.scheduler_config.max_num_batched_tokens
 

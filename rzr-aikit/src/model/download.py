@@ -61,12 +61,11 @@ def download_model(model_name: str):
 
         model_config = ModelConfig(
             model=model_name,
-            task="auto",
             tokenizer=model_name,
             tokenizer_mode="auto",
             trust_remote_code=False,
             dtype="auto",
-            seed=None,
+            seed=0,
         )
         load_config = LoadConfig(load_format="auto")
         loader = get_model_loader(load_config)

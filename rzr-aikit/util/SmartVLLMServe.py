@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, List
 
 from vllm import EngineArgs
-from vllm.utils import FlexibleArgumentParser
+from vllm.utils.argparse_utils import FlexibleArgumentParser
 
 
 class SmartVLLMServe:
@@ -150,8 +150,21 @@ class SmartVLLMServe:
 
                 # Handle all other types
                 else:
-                    changed_args.append(flag)
-                    changed_args.append(str(new_val))
+                    # Some nested/structured vLLM args (e.g. rope_parameters)
+                    # may be represented as non-serializable helper objects
+                    # (like ArgsKwargs). Passing their string repr to CLI
+                    # breaks pydantic validation. Only include if JSON-serializable.
+                    try:
+                        json.dumps(new_val)
+                        changed_args.append(flag)
+                        changed_args.append(str(new_val))
+                    except (TypeError, ValueError):
+                        # Special-case: skip rope_parameters unless provided as dict
+                        # so vLLM will rely on its internal defaults.
+                        if field.name == "rope_parameters":
+                            continue
+                        # Otherwise, conservatively skip unrecognized complex types.
+                        continue
 
         return changed_args
 

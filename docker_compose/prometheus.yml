@@ -1,0 +1,48 @@
+# =============================================================================
+# Prometheus Configuration for Razer AIKit Monitoring
+# =============================================================================
+# This configuration defines how Prometheus collects metrics from AIKit services
+#
+# Monitored Services:
+#   - Ray cluster (head and worker nodes)
+#   - vLLM inference server
+#
+# Note: Add additional Ray worker nodes by uncommenting and configuring
+#       additional scrape targets in the ray job section
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Global Settings
+# -----------------------------------------------------------------------------
+global:
+  scrape_interval: 5s      # How frequently to scrape targets
+  scrape_timeout: 1s       # Timeout for each scrape request
+
+# -----------------------------------------------------------------------------
+# Scrape Configurations
+# -----------------------------------------------------------------------------
+scrape_configs:
+  # vLLM Inference Server Metrics
+  # Collects performance metrics from the vLLM model serving endpoint
+  - job_name: aikit_vllm
+    static_configs:
+      - targets: ['localhost:8000']
+
+  # Ray Cluster Head Node Metrics
+  # Collects metrics from the Ray head node (resource usage, task execution, etc.)
+  - job_name: ray
+    static_configs:
+      - targets: ['localhost:8080']
+
+  # Ray Cluster Worker Nodes (Example)
+  # Uncomment and configure for each additional worker node
+  # - job_name: ray_worker_1
+  #   static_configs:
+  #     - targets: ['192.168.8.6:8080']
+
+  # Prometheus Self-Monitoring (Optional)
+  # Uncomment to monitor Prometheus itself
+  # - job_name: prometheus
+  #   static_configs:
+  #     - targets: ['localhost:9090']
+

@@ -4,31 +4,38 @@ For most use cases, we recommend using the official Razer AIKit container image 
 However, local builds may be necessary for specific scenarios, such as experimental hardware support or custom configurations.
 If your use case requires features not covered in the official build, please open an issue and we'll work to address your requirements.
 
-## Building vLLM Container
+## Building Razer AIKit
 
-To build Razer AIKit locally, a vLLM container must first be available as a base dependency.
-Razer's custom vLLM build provides comprehensive support for all NVIDIA GPUs (Workstation/Consumer, Data Center, and Jetson) with compute capability 7.0 or higher, and has been extensively tested on consumer GPU configurations. This enhanced compatibility extends beyond the official vLLM image's limited GPU support matrix.
+Razer AIKit extends the official vLLM image (vllm/vllm-openai) with additional ML tooling, Jupyter integration, and custom GPU capabilities. The build process automatically pulls the latest vLLM base image and adds Razer-specific enhancements.
+
+The container provides comprehensive support for all NVIDIA GPUs with compute capability 7.0 or higher (Workstation/Consumer, Data Center, and Jetson), and has been extensively tested on consumer GPU configurations.
 
 See the [full list of NVIDIA GPUs and their compute capabilities](https://developer.nvidia.com/cuda-gpus).
 
-Build the Razer vLLM container by executing:
-
-```sh
-./docker_build_vllm/make.sh
-```
-
-Upon successful completion, a local vLLM image will be available with the tag `razer:vllm`.
-
-## Building Razer AIKit
-
-Once the vLLM container is available, build Razer AIKit by running:
+Build the Razer AIKit container by executing:
 
 ```sh
 ./docker_build_aikit/make.sh
 ```
 
-**Note**: The build system is currently in active development. Configuration parameters can be modified directly in the Dockerfile and shell script files.
-The resulting image will be tagged as `razer:aikit` and can be executed using standard `docker run` commands.
+Upon successful completion, a local AIKit image will be available with the tag `razer:aikit`.
+
+### Build Configuration
+
+The build uses a multi-stage Dockerfile with the following stages:
+1. **Base Environment** - Extends vLLM with conda and Python 3.12
+2. **GPU Tools Build** - Compiles custom GPU discovery module
+3. **Extended vLLM** - Adds Ray, vLLM audio, scripts, and benchmarks
+4. **AIKit Package** - Builds rzr-aikit Python wheel
+5. **Test (Optional)** - Runs unit tests
+6. **Jupyter Extension** - Builds custom Jupyter Lab extension
+7. **Production Image** - Final image with JupyterLab and LlamaFactory
+
+Version pinning is managed in the Dockerfile:
+- `CUDA_BUILD_IMAGE` - CUDA development environment (example: nvidia/cuda:12.9.1-devel-ubuntu20.04)
+- `VLLM_IMAGE` - vLLM base image (example: vllm/vllm-openai:v0.14.1)
+
+To customize versions or build specific stages, modify the build script in `docker_build_aikit/make.sh`.
 
 ## Running Tests
 
@@ -38,4 +45,4 @@ Testing is implemented as a dedicated build target stage in the Razer AIKit Dock
 ./docker_build_aikit/make.sh test
 ```
 
-The tests are located in `rzrtools/rzr/tests/model/` and include validation of the Razer AIKit CLI functionality.
+The tests are located in `rzr-aikit/tests/model/` and include validation of the Razer AIKit CLI functionality.

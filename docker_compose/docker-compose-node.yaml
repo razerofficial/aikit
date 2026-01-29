@@ -1,0 +1,55 @@
+# =============================================================================
+# Razer AIKit - Worker Node Docker Compose Configuration
+# =============================================================================
+# This compose file sets up an AIKit worker node that joins an existing Ray
+# cluster. Worker nodes provide additional GPU compute resources to the cluster.
+#
+# Prerequisites:
+#   - A running Ray head node (started with docker-compose.yaml)
+#   - Network connectivity to the head node
+#
+# Configuration:
+#   Update the following parameters in the command section:
+#   --ifname:  Network interface name (use 'ip a' to find yours)
+#   --address: Ray head node address in format <IP>:<PORT> (default port: 6379)
+#
+# Usage:
+#   docker compose -f docker-compose-node.yaml up -d
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Razer AIKit - Ray Cluster Worker Node
+  # ---------------------------------------------------------------------------
+  # Worker node that joins the Ray cluster to provide distributed compute
+  # Services:
+  #   - Ray worker node
+  #   - Ray metrics exporter (port 8080)
+  #   - JupyterLab (port 8888, no authentication)
+  rzr-aikit-node:
+    image: razerofficial/aikit:latest
+    container_name: rzr-aikit-node
+    network_mode: host
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    ipc: host
+    entrypoint: ["bash", "-i"]
+    command: >
+      -c "source /home/Razer/miniconda3/etc/profile.d/conda.sh &&
+      conda activate torch291_cuda129 &&
+      rzr-aikit cluster join --ifname enp1s0f0np0 --address 192.168.8.20:6379 --metrics-export-port 8080 &&
+      jupyter lab --NotebookApp.token='' --NotebookApp.password='' --ip=0.0.0.0 --port=8888 "
+    environment:
+      # HuggingFace token for model downloads (set in .env file or shell)
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
+    volumes:
+      # Cache HuggingFace models locally
+      - $HOME/.cache/huggingface:/home/Razer/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

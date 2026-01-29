@@ -103,7 +103,7 @@ nvidia-smi
 
 </details>
 
-### ⚡ One-Line Installation
+### ⚡ Quick Start & Your First Model
 
 ```bash
 # Create huggingface cache directory if it doesn't exist
@@ -119,8 +119,6 @@ docker run -it \
   --env HUGGING_FACE_HUB_TOKEN=<YOUR_TOKEN> \
   razerofficial/aikit:latest
 ```
-
-### 🎯 Your First Model
 
 Once inside the container, choose your preferred approach:
 
@@ -138,6 +136,35 @@ jupyter lab --ip="0.0.0.0"
 # Run a lightweight coding model
 rzr-aikit model run deepseek-ai/deepseek-coder-1.3b-instruct
 ```
+
+### 🔬 Advanced Mode
+
+For production deployments and monitoring, enable the full stack with Docker Compose:
+
+```bash
+# 1. Create HuggingFace cache directory (required before starting)
+mkdir -p $HOME/.cache/huggingface
+
+# 2. Set your HuggingFace token (required for model downloads)
+export HUGGING_FACE_HUB_TOKEN=<YOUR_TOKEN>
+
+# 3. Start all services (Jupyter Lab + Grafana + Open WebUI + Prometheus + Ray)
+docker compose -f docker_compose/docker-compose.yaml up -d
+```
+
+**Available Services:**
+
+- **📓 Jupyter Lab** - Interactive notebook environment with pre-configured examples 
+(Available at `http://localhost:8888`)
+
+- **📊 Grafana** - Live monitoring dashboards with real-time GPU metrics, model performance, and Ray cluster statistics 
+(Available at `http://localhost:3000`)
+
+- **💬 Open WebUI** - Modern web interface for interactive chat and model testing 
+(Available at `http://localhost:1919`)
+
+- **🎯 Prometheus** - Comprehensive metrics collection for observability 
+(Available at `http://localhost:9090`)
 
 
 
@@ -194,5 +221,5 @@ We welcome contributions from the community! Special thanks to all our contribut
 
 **Made with ❤️ by the Razer AI Team**
 
-[🌟 Star us on GitHub](https://github.com/razer/aikit)
+[🌟 Star us on GitHub](https://github.com/razerofficial/aikit)
 </div>
