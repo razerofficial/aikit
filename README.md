@@ -142,29 +142,18 @@ rzr-aikit model run deepseek-ai/deepseek-coder-1.3b-instruct
 For production deployments and monitoring, enable the full stack with Docker Compose:
 
 ```bash
-# 1. Create HuggingFace cache directory (required before starting)
+git clone https://github.com/razerofficial/aikit.git && cd aikit
 mkdir -p $HOME/.cache/huggingface
-
-# 2. Set your HuggingFace token (required for model downloads)
 export HUGGING_FACE_HUB_TOKEN=<YOUR_TOKEN>
-
-# 3. Start all services (Jupyter Lab + Grafana + Open WebUI + Prometheus + Ray)
-docker compose -f docker_compose/docker-compose.yaml up -d
+docker compose -f docker_compose/docker-compose.yaml up -d --pull always
 ```
 
 **Available Services:**
 
-- **📓 Jupyter Lab** - Interactive notebook environment with pre-configured examples 
-(Available at `http://localhost:8888`)
-
-- **📊 Grafana** - Live monitoring dashboards with real-time GPU metrics, model performance, and Ray cluster statistics 
-(Available at `http://localhost:3000`)
-
-- **💬 Open WebUI** - Modern web interface for interactive chat and model testing 
-(Available at `http://localhost:1919`)
-
-- **🎯 Prometheus** - Comprehensive metrics collection for observability 
-(Available at `http://localhost:9090`)
+- **📓 Jupyter Lab** - Interactive notebooks with examples (`http://localhost:8888`)
+- **📊 Grafana** - GPU metrics, model performance, Ray cluster stats (`http://localhost:3000`)
+- **💬 Open WebUI** - Chat interface for model testing (`http://localhost:1919`)
+- **🎯 Prometheus** - Metrics collection (`http://localhost:9090`)
 
 
 

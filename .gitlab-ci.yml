@@ -21,6 +21,7 @@ test:
 
 build-aikit:
   stage: build
+  timeout: 1h 30m
   tags: 
     - saas-linux-2xlarge-amd64
   image: docker:cli
