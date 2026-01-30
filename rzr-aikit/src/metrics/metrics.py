@@ -63,11 +63,11 @@ def metrics(
         elif metric.name == "vllm:time_per_output_token_seconds":
             for trpt_sample in metric.samples:
                 if trpt_sample.name == "vllm:time_per_output_token_seconds_sum":
-                    stats[ttft_sample.labels["model_name"]][
+                    stats[trpt_sample.labels["model_name"]][
                         "trpt_sum"
                     ] = trpt_sample.value
                 elif trpt_sample.name == "vllm:time_per_output_token_seconds_count":
-                    stats[ttft_sample.labels["model_name"]][
+                    stats[trpt_sample.labels["model_name"]][
                         "trpt_count"
                     ] = trpt_sample.value
         elif metric.name == "vllm:generation_tokens":
