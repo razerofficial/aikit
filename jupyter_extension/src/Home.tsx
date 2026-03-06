@@ -178,6 +178,22 @@ export function Home(props: { open: (path: string) => void }) {
                 🌐 2b. Distributed Inferencing (Node)
               </a>
             </li>
+            <li>
+              <a 
+                style={linkStyle}
+                onClick={() => props.open('notebooks/3_On_Device_Image_Generation.ipynb')}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#44d62c';
+                  e.currentTarget.style.background = '#151515';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#222222';
+                  e.currentTarget.style.background = '#111111';
+                }}
+              >
+                🎨 3. On-Device Image Generation
+              </a>
+            </li>
           </ul>
         </div>
 
@@ -187,7 +203,7 @@ export function Home(props: { open: (path: string) => void }) {
             <li>
               <a 
                 style={linkStyle}
-                onClick={() => props.open('notebooks/3_On_Device_Fine_Tuning_LoRA.ipynb')}
+                onClick={() => props.open('notebooks/4_On_Device_Fine_Tuning_LoRA.ipynb')}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = '#44d62c';
                   e.currentTarget.style.background = '#151515';
@@ -197,13 +213,13 @@ export function Home(props: { open: (path: string) => void }) {
                   e.currentTarget.style.background = '#111111';
                 }}
               >
-                💻 3. On-Device Fine-Tuning (LoRA)
+                💻 4. On-Device Fine-Tuning (LoRA)
               </a>
             </li>
             <li>
               <a 
                 style={linkStyle}
-                onClick={() => props.open('notebooks/4a_(Head)_Distributed_Fine_Tuning_LoRA.ipynb')}
+                onClick={() => props.open('notebooks/5a_(Head)_Distributed_Fine_Tuning_LoRA.ipynb')}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = '#44d62c';
                   e.currentTarget.style.background = '#151515';
@@ -213,13 +229,13 @@ export function Home(props: { open: (path: string) => void }) {
                   e.currentTarget.style.background = '#111111';
                 }}
               >
-                🌐 4a. Distributed Fine-Tuning LoRA (Head)
+                🌐 5a. Distributed Fine-Tuning LoRA (Head)
               </a>
             </li>
             <li>
               <a 
                 style={linkStyle}
-                onClick={() => props.open('notebooks/4b_(Node)_Distributed_Fine_Tuning_LoRA.ipynb')}
+                onClick={() => props.open('notebooks/5b_(Node)_Distributed_Fine_Tuning_LoRA.ipynb')}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = '#44d62c';
                   e.currentTarget.style.background = '#151515';
@@ -229,7 +245,7 @@ export function Home(props: { open: (path: string) => void }) {
                   e.currentTarget.style.background = '#111111';
                 }}
               >
-                🌐 4b. Distributed Fine-Tuning LoRA (Node)
+                🌐 5b. Distributed Fine-Tuning LoRA (Node)
               </a>
             </li>
           </ul>
@@ -242,7 +258,7 @@ export function Home(props: { open: (path: string) => void }) {
           <li>
             <a 
               style={linkStyle}
-              onClick={() => props.open('notebooks/5_Integrating_Razer_AIKit_with_OpenAI_API.ipynb')}
+              onClick={() => props.open('notebooks/6_Integrating_Razer_AIKit_with_OpenAI_API.ipynb')}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = '#44d62c';
                 e.currentTarget.style.background = '#151515';
@@ -252,13 +268,13 @@ export function Home(props: { open: (path: string) => void }) {
                 e.currentTarget.style.background = '#111111';
               }}
             >
-              5. Integrating AIKit with OpenAI API
+              6. Integrating AIKit with OpenAI API
             </a>
           </li>
           <li>
             <a 
               style={linkStyle}
-              onClick={() => props.open('notebooks/6_Sematic_Search.ipynb')}
+              onClick={() => props.open('notebooks/7_Semantic_Search.ipynb')}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = '#44d62c';
                 e.currentTarget.style.background = '#151515';
@@ -268,7 +284,7 @@ export function Home(props: { open: (path: string) => void }) {
                 e.currentTarget.style.background = '#111111';
               }}
             >
-              6. Semantic Search
+              7. Semantic Search
             </a>
           </li>
         </ul>

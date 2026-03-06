@@ -55,7 +55,7 @@ def download_model(model_name: str):
     """Download the model."""
 
     try:
-        with console.status("Preparing download..."):
+        with console.status("Attempting download with vLLM loader..."):
             from vllm.config import LoadConfig, ModelConfig
             from vllm.model_executor.model_loader import get_model_loader
 
@@ -73,12 +73,31 @@ def download_model(model_name: str):
 
         console.print(f"Model '{model_name}' downloaded successfully.")
 
-    except Exception as e:
-        from src.model.remove import remove
+    except Exception as vllm_error:
+        console.print(f"vLLM loader failed: {vllm_error}")
+        console.print("Attempting fallback to snapshot_download...")
 
-        console.print(e)
-        console.print("Removing model from cache...")
-        remove(model_name)
+        try:
+            from huggingface_hub import snapshot_download
+
+            snapshot_download(
+                repo_id=model_name,
+                local_files_only=False,
+            )
+
+            console.print(f"Model '{model_name}' downloaded successfully.")
+            return
+
+        except Exception as snapshot_error:
+            # Both methods failed - invalid model name or other issue
+            try:
+                from src.model.remove import remove
+
+                console.print(snapshot_error)
+                console.print("Removing any partial downloads from cache...")
+                remove(model_name)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

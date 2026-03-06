@@ -93,6 +93,8 @@ class ModelInfoFetcher:
 
                 print(f"_load_model_info() exception {e.__class__} : {e}")
                 pass
+            except FileNotFoundError:
+                raise
             except Exception as e:
                 print(f"_load_model_info() exception {e.__class__} : {e}")
                 pass

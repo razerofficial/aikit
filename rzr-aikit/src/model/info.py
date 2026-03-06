@@ -35,6 +35,7 @@ def info(
         $ rzr-aikit model info facebook/opt-125m --full-config
     """
     from util.ModelInfoFetcher import ModelInfoFetcher
+    from util.DiffusionModelInfoFetcher import DiffusionModelInfoFetcher
     from util.mlib import get_cuda_total_vram, check_model_fit
     from util.connectivity import check_huggingface_connectivity
     from src import HuggingfaceAccessTokenRequired
@@ -45,42 +46,58 @@ def info(
 
     try:
         has_connection = check_huggingface_connectivity()
-        try:
-            fetcher = ModelInfoFetcher(model_name, allow_internet=has_connection)
 
-            huggingface_info = None
+        huggingface_info = None
+        quant_type = None
+        model_config = None
+        data_type = None
+        weight_size = None
+        local = None
+        distributed = "-"
+
+        # Try ModelInfoFetcher first
+        try:
+            try:
+                fetcher = ModelInfoFetcher(model_name, allow_internet=has_connection)
+            except HuggingfaceAccessTokenRequired:
+                from util.HuggingfaceHubToken import HuggingfaceHubToken
+
+                hug = HuggingfaceHubToken()
+                token = hug.get_access_token()
+                fetcher = ModelInfoFetcher(
+                    model_name, access_token=token, allow_internet=has_connection
+                )
+
             if has_connection:
                 huggingface_info = fetcher._model_info
-            quant_type = None
             if fetcher.quant_config:
                 quant_type = fetcher.quant_config.get("quant_method")
-
             model_config = fetcher.config
             data_type = fetcher.dtype
             weight_size = fetcher.total_bytes
 
-        except HuggingfaceAccessTokenRequired:
-            from util.HuggingfaceHubToken import HuggingfaceHubToken
+        except (ValueError, FileNotFoundError) as infofetcherror:
+            # Fallback to DiffusionModelInfoFetcher if ModelInfoFetcher fails
+            console.print(
+                f"[dim]Initial retrieval failed, retrying as a diffusion model...[/dim]"
+            )
 
             try:
+                fetcher = DiffusionModelInfoFetcher(
+                    model_name, allow_internet=has_connection
+                )
+            except HuggingfaceAccessTokenRequired:
+                from util.HuggingfaceHubToken import HuggingfaceHubToken
+
                 hug = HuggingfaceHubToken()
                 token = hug.get_access_token()
-
-                fetcher = ModelInfoFetcher(
+                fetcher = DiffusionModelInfoFetcher(
                     model_name, access_token=token, allow_internet=has_connection
                 )
-                huggingface_info = None
-                if has_connection:
-                    huggingface_info = fetcher._model_info
-                quant_type = None
-                if fetcher.quant_config:
-                    quant_type = fetcher.quant_config.get("quant_method")
 
-                model_config = fetcher.config
-                data_type = fetcher.dtype
-                weight_size = fetcher.total_bytes
-            except HuggingfaceAccessTokenRequired:
-                raise
+            if has_connection:
+                huggingface_info = fetcher.model_info
+            weight_size = fetcher.total_bytes
 
         local_memory = get_cuda_total_vram()
         dist_memory = get_cuda_total_vram(distributed=True)
@@ -88,8 +105,6 @@ def info(
         local = check_model_fit(
             local_memory, weight_size, quant_type if quant_type else data_type
         )
-
-        distributed = "-"
         if dist_memory > 0:
             distributed = check_model_fit(
                 dist_memory, weight_size, quant_type if quant_type else data_type
@@ -107,7 +122,7 @@ def info(
                 f"{getattr(huggingface_info.card_data, 'license', 'Unknown')}\n"
             )
         basic_info.append(f"{'Size:':<12} ", style="bold")
-        basic_info.append(f"{naturalsize(weight_size)}")
+        basic_info.append(f"{naturalsize(weight_size, binary=True)}")
 
         basic_panel = Panel(
             basic_info,
@@ -123,9 +138,17 @@ def info(
             tech_info.append(f"{'Updated:':<12} ", style="bold")
             tech_info.append(f"{huggingface_info.last_modified}\n", style="dim")
         tech_info.append(f"{'Context Len:':<12} ", style="bold")
-        tech_info.append(f"{model_config.get('max_position_embeddings', 'Unknown')}\n")
+        context_len = (
+            model_config.get("max_position_embeddings", "Unknown")
+            if model_config
+            else "Unknown"
+        )
+        tech_info.append(f"{context_len}\n")
         tech_info.append(f"{'Precision:':<12} ", style="bold")
-        tech_info.append(f"{quant_type if quant_type else data_type}")
+        precision = (
+            quant_type if quant_type else (data_type if data_type else "Unknown")
+        )
+        tech_info.append(f"{precision}")
 
         tech_panel = Panel(
             tech_info,

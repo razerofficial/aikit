@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from accelerate.utils import convert_bytes
+from util.mlib import get_device_memory_info_with_fallback
 
 # Configuration constants
 CUDA_DEVICE_ORDER = "PCI_BUS_ID"  # Stable PCI bus ordering
@@ -367,7 +368,7 @@ class GPUDiscovery:
             compute_cap = float(f"{maj}.{min_ver}")
             
             # Memory info and formats
-            memory_info = nvml.nvmlDeviceGetMemoryInfo(handle)
+            memory_info = get_device_memory_info_with_fallback(handle)
             tensor_formats = get_supported_formats(compute_cap)
             
             # Benchmark if enabled and supported

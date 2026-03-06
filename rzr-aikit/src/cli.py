@@ -11,6 +11,7 @@ from src.model import remove
 from src.model import stop
 from src.model import generate
 from src.metrics import metrics
+from src.ui import ui
 
 from src.cluster import run
 from src.cluster import join
@@ -45,8 +46,9 @@ app.add_typer(model_app, name="model")
 # Register Cluster commands
 app.add_typer(cluster_app, name="cluster")
 
-# Register metrics as a root-level command
+# Register root-level commands
 app.command(name="metrics")(metrics.metrics)
+app.command(name="ui")(ui)
 
 if __name__ == "__main__":
     app()

@@ -610,9 +610,9 @@ rzr-aikit cluster stop
 - Setup Guide - Installation and environment setup: [setup.md](setup.md)
 - Inferencing Guide - Model deployment workflows: [inferencing.md](inferencing.md)
 - Interactive Notebooks - Jupyter-based tutorials in `notebooks/` directory:
-  - `3_On_Device_Fine_Tuning_LoRA.ipynb` - Local fine-tuning walkthrough
-  - `4a_(Head)_Distributed_Fine_Tuning_LoRA.ipynb` - Distributed training (head)
-  - `4b_(Node)_Distributed_Fine_Tuning_LoRA.ipynb` - Distributed training (worker)
+  - `4_On_Device_Fine_Tuning_LoRA.ipynb` - Local fine-tuning walkthrough
+  - `5a_(Head)_Distributed_Fine_Tuning_LoRA.ipynb` - Distributed training (head)
+  - `5b_(Node)_Distributed_Fine_Tuning_LoRA.ipynb` - Distributed training (worker)
 - LlamaFactory Documentation - LlamaFactory project: https://github.com/hiyouga/LLaMA-Factory
 - vLLM LoRA Documentation - LoRA serving with vLLM: https://docs.vllm.ai/en/latest/models/lora.html
 - Ray Documentation - Ray distributed computing: https://docs.ray.io

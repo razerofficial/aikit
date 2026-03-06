@@ -6,6 +6,48 @@ from urllib.error import URLError
 
 logger = logging.getLogger(__name__)
 
+def get_device_memory_info_with_fallback(handle):
+    """
+    Get GPU memory information with PyTorch CUDA fallback for NVML compatibility.
+    
+    This function attempts to retrieve memory info via NVML first. If NVML reports
+    the operation as not supported (e.g., on GB10/Grace Blackwell GPUs where NVML
+    may have limited support), it falls back to using PyTorch's CUDA API by matching
+    the device via PCI bus address.
+    
+    Args:
+        handle: NVML device handle
+        
+    Returns:
+        c_nvmlMemory_t object with total, free, and used memory in bytes
+        
+    Raises:
+        RuntimeError: If the NVML device is not visible to CUDA
+    """
+    from torch import cuda
+    try:
+        return nvmlDeviceGetMemoryInfo(handle)
+    except NVMLError_NotSupported:
+        pass
+    pci = nvmlDeviceGetPciInfo(handle).busId.lower()
+    index = -1
+    for i in range(cuda.device_count()):
+        device_properties = cuda.get_device_properties(i)
+        domain = device_properties.pci_domain_id
+        bus = device_properties.pci_bus_id
+        device = device_properties.pci_device_id
+        pci_addr = f"{domain:08x}:{bus:02x}:{device:02x}.0"
+        if pci_addr == pci:
+            index = i
+    if index == -1:
+        raise RuntimeError("NVML device not visible to CUDA")
+    info = cuda.mem_get_info(f"cuda:{index}")
+    ret = c_nvmlMemory_t()
+    ret.free = info[0]
+    ret.total = info[1]
+    ret.used = info[1] - info[0]
+    return ret
+
 def get_cuda_total_vram(distributed: bool = False) -> float:
     """
     Get total VRAM that can be used for loading a model
@@ -33,7 +75,7 @@ def get_cuda_total_vram(distributed: bool = False) -> float:
             nvmlInit()
             device_count = nvmlDeviceGetCount()
             handles = [nvmlDeviceGetHandleByIndex(i) for i in range(device_count)]
-            mem_infos = [nvmlDeviceGetMemoryInfo(handle) for handle in handles]
+            mem_infos = [get_device_memory_info_with_fallback(handle) for handle in handles]
             return sum(info.total for info in mem_infos)
         
     total_memory = sum(
@@ -48,7 +90,7 @@ def get_cuda_gpu_infos():
             "name": nvmlDeviceGetName(handle),
             "uuid": nvmlDeviceGetUUID(handle),
             # "serial": nvmlDeviceGetSerial(handle),
-            "mem": nvmlDeviceGetMemoryInfo(handle),
+            "mem": get_device_memory_info_with_fallback(handle),
         }
     device_count = nvmlDeviceGetCount()
     handles = [nvmlDeviceGetHandleByIndex(i) for i in range(device_count)]
@@ -62,7 +104,7 @@ def get_metrics():
     except URLError:
         return []
     
-def check_model_fit(memory: float, weight_size: int, dtype: str) -> str:
+def check_model_fit(memory: float, weight_size: int, dtype: str | None) -> str:
     import re
 
     try:
@@ -70,10 +112,12 @@ def check_model_fit(memory: float, weight_size: int, dtype: str) -> str:
     except (AttributeError, ValueError):
         print(f"Warning: Unable to extract bits from dtype '{dtype}'. Assuming 16-bit.")
         extracted_dtype = 16
+    except TypeError:
+        pass
         
     if weight_size * 1.2 < memory:
         fit = "✅ Yes"
-    elif weight_size * (4 / extracted_dtype) * 1.2 < memory:
+    elif dtype and weight_size * (4 / extracted_dtype) * 1.2 < memory: # only for LLMs
         fit = "🟡 Limited"
     else:
         fit = "❌ No"
@@ -91,3 +135,6 @@ def get_running_models():
 
 def comp_generate(*args, **kwargs):
     return client.completions.create(*args, **kwargs)
+
+def image_generate(*args, **kwargs):
+    return client.images.generate(*args, **kwargs)

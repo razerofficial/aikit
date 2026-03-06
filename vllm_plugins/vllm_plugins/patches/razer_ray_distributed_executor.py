@@ -4,6 +4,7 @@ from concurrent.futures import Future
 
 
 RayDistributedExecutor._org_init_ = RayDistributedExecutor.__init__
+RayDistributedExecutor._org_init_executor = RayDistributedExecutor._init_executor
 RayDistributedExecutor._org_init_workers_ray = RayDistributedExecutor._init_workers_ray
 RayDistributedExecutor._org_collective_rpc = RayDistributedExecutor.collective_rpc
 
@@ -49,6 +50,9 @@ def __init__(self, *args, **kwargs):
     os.environ.setdefault("RAY_CGRAPH_get_timeout", "300")
     env_val = os.getenv("VLLM_GPU_ORDER")
     if env_val:
+        from .. import register_RayWorkerWrapper
+        register_RayWorkerWrapper()
+
         gpu_uuid_order = [x.strip() for x in env_val.split(",") if x.strip()]
         print(f"{gpu_uuid_order=}")
 
@@ -79,6 +83,22 @@ def __init__(self, *args, **kwargs):
 
     print(f"razer_ray_distributed_executor __init__ _org_init_ = {self._org_init_}")
     self._org_init_(*args, **kwargs)
+
+
+def _init_executor(self) -> None:
+    if self.target_gpu_order:
+        from ray.runtime_env import RuntimeEnv
+
+        base_env = self.parallel_config.ray_runtime_env
+        if base_env is None:
+            runtime_env = RuntimeEnv()
+            runtime_env["worker_process_setup_hook"] = "vllm_plugins.register_RayWorkerWrapper"
+            self.parallel_config.ray_runtime_env = runtime_env
+        else:
+            base_env["worker_process_setup_hook"] = "vllm_plugins.register_RayWorkerWrapper"
+
+    print(f"razer_ray_distributed_executor _init_executor _org_init_executor = {self._org_init_executor}")
+    self._org_init_executor()
 
 
 def _init_workers_ray(self, placement_group: "PlacementGroup", **ray_remote_kwargs):
@@ -121,5 +141,6 @@ def collective_rpc(
 
 
 RayDistributedExecutor.__init__ = __init__
+RayDistributedExecutor._init_executor = _init_executor
 RayDistributedExecutor._init_workers_ray = _init_workers_ray
 RayDistributedExecutor.collective_rpc = collective_rpc

@@ -30,6 +30,7 @@ def list():
     try:
         from util.mlib import get_cuda_total_vram, check_model_fit
         from util.ModelInfoFetcher import ModelInfoFetcher
+        from util.DiffusionModelInfoFetcher import DiffusionModelInfoFetcher
         from huggingface_hub import scan_cache_dir
 
         from rich.table import Table
@@ -62,12 +63,24 @@ def list():
             if not has_weights(repo):
                 continue
             try:
-                fetcher = ModelInfoFetcher(repo.repo_id, allow_internet=False)
-                weight_size = fetcher.total_bytes
-                data_type = fetcher.dtype
+                weight_size = None
+                data_type = None
                 quant_type = None
-                if fetcher.quant_config:
-                    quant_type = fetcher.quant_config["quant_method"]
+
+                # Try ModelInfoFetcher first
+                try:
+                    fetcher = ModelInfoFetcher(repo.repo_id, allow_internet=False)
+                    weight_size = fetcher.total_bytes
+                    data_type = fetcher.dtype
+                    if fetcher.quant_config:
+                        quant_type = fetcher.quant_config["quant_method"]
+
+                except (ValueError, FileNotFoundError):
+                    # Fallback to DiffusionModelInfoFetcher if ModelInfoFetcher fails
+                    fetcher = DiffusionModelInfoFetcher(
+                        repo.repo_id, allow_internet=False
+                    )
+                    weight_size = fetcher.total_bytes
 
                 local = check_model_fit(
                     local_memory, weight_size, quant_type if quant_type else data_type
@@ -90,7 +103,7 @@ def list():
         for name, size, local, distributed in models:
             table.add_row(
                 name,
-                naturalsize(size),
+                naturalsize(size, binary=True),
                 local,
                 distributed,
             )

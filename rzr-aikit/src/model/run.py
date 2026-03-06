@@ -10,7 +10,6 @@ import os
 from src import model_app
 from util.spinner import spinner
 
-
 console = Console()
 
 
@@ -81,6 +80,14 @@ def run(
             help="The name of the model to run, followed by any extra arguments for the VLLM server.",
         ),
     ],
+    omni: Annotated[
+        bool,
+        typer.Option(
+            "--omni",
+            help="Diffusion models require this flag to be set.",
+            is_flag=True,
+        ),
+    ] = False,
 ):
     """
     Run a model for inferencing.
@@ -104,18 +111,18 @@ def run(
 
     gpu = GPUStatus()
     if "JPY_PARENT_PID" in os.environ:
-        engine = run_model(ctx, model)
+        engine = run_model(ctx, model, omni)
         if engine:
             start_server(engine)
     else:
         with Live(gpu, console=console, refresh_per_second=8, transient=True):
-            engine = run_model(ctx, model)
+            engine = run_model(ctx, model, omni)
             if engine:
                 start_server(engine)
 
 
 @spinner("Optimizing parameters...", console=console)
-def run_model(ctx: typer.Context, model: str):
+def run_model(ctx: typer.Context, model: str, omni: bool):
     try:
         flags: list[str] = ctx.args
 
@@ -131,6 +138,9 @@ def run_model(ctx: typer.Context, model: str):
 
         engine = SmartVLLMServe(model, *flags)
 
+        if omni:
+            engine.omni = True
+            return engine
         if hasattr(engine.engine_args, "max_num_seqs"):
             if engine.engine_args.max_num_seqs is None:
                 engine.engine_args.max_num_seqs = 5
@@ -187,13 +197,17 @@ def start_server(engine):
     """
     try:
         import re
-        route_regex = re.compile(r'INFO\s+\S+:\d+:\s*(.*)')
-        start_regex = re.compile(r'INFO:\s*(.*)')
 
-        process = engine.serve()
+        route_regex = re.compile(r"INFO\s+\S+:\d+:\s*(.*)")
+        start_regex = re.compile(r"INFO:\s*(.*)")
+
+        extra_args = ["--omni"] if getattr(engine, "omni", False) else None
+        process = engine.serve(extra=extra_args)
         start_print = False
         while True:
             piped_output = process.stdout.readline()
+            if "Error" in piped_output:
+                raise Exception(piped_output)
             if "Max retries exceeded" in piped_output:
                 raise Exception("Unable to establish connection to huggingface.co")
             if not piped_output and process.poll() is not None:

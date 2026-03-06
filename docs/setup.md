@@ -441,9 +441,9 @@ df -h
 ### Interactive Examples
 - **[On-Device Inference](../notebooks/1_On_Device_Inferencing.ipynb)** - Single GPU inference
 - **[Distributed Inference](../notebooks/2a_(Head)_Distributed_Inferencing.ipynb)** - Multi-GPU inference
-- **[Fine-Tuning with LoRA](../notebooks/3_On_Device_Fine_Tuning_LoRA.ipynb)** - Parameter-efficient training
-- **[OpenAI API Integration](../notebooks/5_Integrating_Razer_AIKit_with_OpenAI_API.ipynb)** - API compatibility
-- **[Semantic Search](../notebooks/6_Sematic_Search.ipynb)** - Vector search capabilities
+- **[Fine-Tuning with LoRA](../notebooks/4_On_Device_Fine_Tuning_LoRA.ipynb)** - Parameter-efficient training
+- **[OpenAI API Integration](../notebooks/6_Integrating_Razer_AIKit_with_OpenAI_API.ipynb)** - API compatibility
+- **[Semantic Search](../notebooks/7_Sematic_Search.ipynb)** - Vector search capabilities
 
 ## Getting Help
 

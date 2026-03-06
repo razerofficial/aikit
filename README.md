@@ -168,6 +168,7 @@ docker compose -f docker_compose/docker-compose.yaml up -d --pull always
 ### 📖 **Documentation**
 - [CLI Reference](docs/cli-reference.md) - Complete command reference
 - [Setup Guide](docs/setup.md) - Detailed installation instructions
+- [GPU Compatibility](docs/gpu-compatibility.md) - Supported GPUs and compute capabilities
 - [Fine-Tuning Guide](docs/fine-tuning.md) - Model customization
 - [Inference Guide](docs/inferencing.md) - Production deployment
 - [Container Guide](docs/build-container.md) - Docker setup
@@ -181,15 +182,37 @@ docker compose -f docker_compose/docker-compose.yaml up -d --pull always
 - [Distributed Inference](notebooks/2a_(Head)_Distributed_Inferencing.ipynb)
 - [Fine-Tuning with LoRA](notebooks/3_On_Device_Fine_Tuning_LoRA.ipynb)
 - [OpenAI API Integration](notebooks/5_Integrating_Razer_AIKit_with_OpenAI_API.ipynb)
-- [Semantic Search](notebooks/6_Sematic_Search.ipynb)
+- [Semantic Search](notebooks/6_Semantic_Search.ipynb)
 
 </td>
 </tr>
 </table>
 
+---
 
+## 🖥️ Platform Support
 
-### 🏆 **Contributors**
+Razer AIKit is optimized for NVIDIA accelerated computing platforms with support for both x86-64 and ARM64 architectures.
+
+**Workstations & Development**
+- **Razer Blade** - High-performance gaming laptops with GeForce RTX 50 series, RTX 40 series, RTX 30 series, and RTX 20 series
+- **NVIDIA RTX Professional Workstations** - RTX PRO 6000 Blackwell, RTX 6000 Ada, RTX A series
+
+**Data Center & Enterprise**
+- **NVIDIA DGX Systems** (x86-64 and ARM64)
+  - NVIDIA GB10 (DGX Spark)
+  - NVIDIA GB300, GB200
+  - NVIDIA GH200, GH100
+- **Data Center GPUs**: B200, B300, H100, H200, A100, L4, L40, L40S
+
+**GPU Requirements**
+- **Minimum**: NVIDIA GPU with Compute Capability 7.0 (Volta) or higher
+- **Supported Architectures**: Blackwell, Hopper, Ada Lovelace, Ampere, Turing, Volta
+- **Detailed Information**: [GPU Compatibility Guide](docs/gpu-compatibility.md)
+
+---
+
+## 🏆 Contributors
 
 We welcome contributions from the community! Special thanks to all our contributors who make this project possible.
 
@@ -200,7 +223,7 @@ We welcome contributions from the community! Special thanks to all our contribut
 **Licensed under [Apache License 2.0](LICENSE)**
 
 **Additional Resources**
-- [Security Policy](SECURITY.md) - Security reporting guidelines  
+- [Security Policy](SECURITY.md) - Security reporting guidelines
 - [Open Source Notices](OPEN_SOURCE_NOTICES.md) - Third-party acknowledgments
 - [Contributing Guidelines](CONTRIBUTING.md) - Detailed contribution instructions
 

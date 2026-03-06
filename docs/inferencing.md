@@ -214,7 +214,7 @@ rzr-aikit model generate "Explain quantum computing to a 12-year-old."
 #### 7. Benchmark Performance
 
 ```bash
-vllm bench serve \
+python -m vllm.entrypoints.cli.main bench serve \
   --model Qwen/Qwen3-0.6B \
   --dataset-name sharegpt \
   --dataset-path benchmarks/ShareGPT_300_conversations.json \
@@ -374,7 +374,7 @@ rzr-aikit model generate "Explain quantum computing to a 12-year-old."
 **12. Benchmark Performance**
 
 ```bash
-vllm bench serve \
+python -m vllm.entrypoints.cli.main bench serve \
   --model Qwen/Qwen3-14B \
   --dataset-name sharegpt \
   --dataset-path benchmarks/ShareGPT_300_conversations.json \

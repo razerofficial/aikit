@@ -33,7 +33,7 @@ def generate(
         import time
 
         with console.status("Generating output..."):
-            from util.mlib import get_running_models, comp_generate
+            from util.mlib import get_running_models, comp_generate, image_generate
 
             models = [model.id for model in get_running_models()]
 
@@ -64,15 +64,52 @@ def generate(
             )
 
             start = time.time()
-            stream = comp_generate(
-                model=model_id,
-                prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                stream=True,
-                stream_options={"include_usage": True},
-            )
+            try:
+                stream = comp_generate(
+                    model=model_id,
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stream=True,
+                    stream_options={"include_usage": True},
+                )
+            except Exception as e:
+                import base64
+                import os
+
+                with console.status("Generating image..."):
+                    img = image_generate(
+                        model=model_id,
+                        prompt=prompt,
+                        n=1,
+                        size="512x512",
+                    )
+
+                image_bytes = base64.b64decode(img.data[0].b64_json)
+                with open("output.png", "wb") as f:
+                    f.write(image_bytes)
+
+                timespan = time.time() - start
+
+                if "JPY_PARENT_PID" not in os.environ:
+                    os.system("chafa --symbols=block --colors=full output.png")
+
+                stats_table = Table(show_header=True, header_style="bold", box=None)
+                stats_table.add_column("Filename")
+                stats_table.add_column("Time")
+                stats_table.add_row("", "")  # blank row for spacing
+                stats_table.add_row("output.png", f"{timespan:.2f}s")
+
+                console.print(
+                    Panel(
+                        stats_table,
+                        border_style="yellow",
+                        expand=False,
+                    )
+                )
+                console.print("[yellow]Open image file to view in full quality...[/]")
+                return
 
             # Stream completion text directly to console
             stats = None

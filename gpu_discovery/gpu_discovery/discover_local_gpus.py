@@ -1,4 +1,5 @@
 import pynvml
+from util.mlib import get_device_memory_info_with_fallback
 
 # Global cache for NVML static info (bus id, uuid, total mem, etc.)
 _GPU_NVML_INFO = None
@@ -14,7 +15,7 @@ def collect_nvml_info():
         handle = pynvml.nvmlDeviceGetHandleByIndex(i)
         uuid = str(pynvml.nvmlDeviceGetUUID(handle))
         bus_id = pynvml.nvmlDeviceGetPciInfo(handle).busId
-        mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        mem_info = get_device_memory_info_with_fallback(handle)
 
         gpu_nvml_info.append({
             "device_id": i,
