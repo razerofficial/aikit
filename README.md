@@ -37,22 +37,38 @@
 
 <table>
 <tr>
-<td width="50%">
+<td width="50%" align="center">
 
-### 🚀 **Local-First AI Development**
-Run 280,000+ LLMs locally with full privacy and zero cloud costs.
+![Image Generation](docs/images/Image_Gen.gif)
 
-### 🔧 **Open-Source and Community-Driven**
-Apache 2.0 licensed with extensible architecture for custom workflows.
+### 🎨 **AI Image Generation**
+Run iterative image generation locally - craft creative prompts and refine results in real time with zero cloud dependency.
 
 </td>
-<td width="50%">
+<td width="50%" align="center">
+
+![Text Generation](docs/images/Text_Gen.gif)
+
+### 🎯 **Production-Ready Text Generation**
+Instantly test any model through our built-in Open WebUI  - select, prompt, and iterate without any extra setup.
+
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+
+![Multi-GPU Scaling](docs/images/Multi_GPU.gif)
 
 ### 🌐 **Intelligent Multi-GPU Scaling**
-Ray-based orchestration with automatic resource discovery and load balancing.
+Monitor live GPU load in Grafana and seamlessly scale from one overloaded GPU to a full multi-GPU cluster.
 
-### 🎯 **Production-Ready Inference**
-vLLM engine with memory optimization, batched inference, and OpenAI-compatible APIs.
+</td>
+<td width="50%" align="center">
+
+![Local-First Development](docs/images/Local_First.gif)
+
+### 🚀 **Local-First AI Development**
+Explore 280,000+ models on-device - launch AIKit, open Jupyter Lab, and follow step-by-step notebook guides to run your first model locally.
 
 </td>
 </tr>

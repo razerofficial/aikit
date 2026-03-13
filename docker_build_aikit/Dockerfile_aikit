@@ -184,14 +184,9 @@ COPY --from=build_gpu_tools --chown=${USERNAME}:${USERNAME} \
     gpu-ordering-dist ${BASE_WORKDIR}/gpu-ordering-dist
 
 # Install to system Python (accessible by Ray workers and conda via .pth file)
-RUN /usr/bin/pip3 install ${BASE_WORKDIR}/gpu-ordering-dist/*.whl --verbose && \
-    rm -rf ${BASE_WORKDIR}/gpu-ordering-dist
-
-# discovery depends on mlib now so must be installed in a higher site
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    pip install ${BASE_WORKDIR}/gpu-discovery-dist/*.whl --verbose && \
-    rm -rf ${BASE_WORKDIR}/gpu-discovery-dist
+RUN /usr/bin/pip3 install ${BASE_WORKDIR}/gpu-discovery-dist/*.whl --verbose && \
+    /usr/bin/pip3 install ${BASE_WORKDIR}/gpu-ordering-dist/*.whl --verbose && \
+    rm -rf ${BASE_WORKDIR}/gpu-discovery-dist ${BASE_WORKDIR}/gpu-ordering-dist
 
 # Install conda environment hooks
 COPY --chown=${USERNAME}:${USERNAME} \

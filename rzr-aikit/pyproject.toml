@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "rzr"
-version = "0.3.0"
+version = "0.3.1"
 description = "A package for Razer GPU compute and AI services"
 authors = ["Razer Inc."]
 license = "Apache-2.0"
