@@ -206,6 +206,17 @@ docker compose -f docker_compose/docker-compose.yaml up -d --pull always
 
 ---
 
+## 🔌 Extensions & Integrations
+
+Razer AIKit supports modular extensions to enhance its core capabilities.
+
+### FoundLab ATI (Algorithmic Trust Indicator)
+A lightweight, zero-persistence cryptographic middleware that provides enterprise-grade auditability for AI models (LGPD, EU AI Act, BCB 538 compliant). It automatically appends a verifiable signature to AI outputs without writing any data to disk.
+- [FoundLab ATI Documentation](extensions/foundlab-ati/README.md)
+- [Interactive Guide](extensions/foundlab-ati/example_integration.ipynb)
+
+---
+
 ## 🖥️ Platform Support
 
 Razer AIKit is optimized for NVIDIA accelerated computing platforms with support for both x86-64 and ARM64 architectures.
