@@ -68,7 +68,7 @@ Monitor live GPU load in Grafana and seamlessly scale from one overloaded GPU to
 ![Local-First Development](docs/images/Local_First.gif)
 
 ### 🚀 **Local-First AI Development**
-Explore 280,000+ models on-device - launch AIKit, open Jupyter Lab, and follow step-by-step notebook guides to run your first model locally.
+Explore 300,000+ models on-device - launch AIKit, open Jupyter Lab, and follow step-by-step notebook guides to run your first model locally.
 
 </td>
 </tr>
