@@ -23,7 +23,7 @@ Upon successful completion, a local AIKit image will be available with the tag `
 ### Build Configuration
 
 The build uses a multi-stage Dockerfile with the following stages:
-1. **Base Environment** - Extends vLLM with conda and Python 3.12
+1. **Base Environment** - Extends vLLM with Python environment setup
 2. **GPU Tools Build** - Compiles custom GPU discovery module
 3. **Extended vLLM** - Adds Ray, vLLM audio, scripts, and benchmarks
 4. **AIKit Package** - Builds rzr-aikit Python wheel
@@ -45,4 +45,4 @@ Testing is implemented as a dedicated build target stage in the Razer AIKit Dock
 ./docker_build_aikit/make.sh test
 ```
 
-The tests are located in `rzr-aikit/tests/model/` and include validation of the Razer AIKit CLI functionality.
+The tests are located in `tests/model/` and include validation of the Razer AIKit CLI functionality.

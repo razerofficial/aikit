@@ -76,11 +76,9 @@ services:
     tty: true
     restart: unless-stopped
     ipc: host
-    entrypoint: ["bash", "-i"]
+    entrypoint: ["bash", "-l"]
     command: >
-      -c "source /home/Razer/miniconda3/etc/profile.d/conda.sh &&
-      conda activate torch291_cuda129 &&
-      rzr-aikit cluster run --metrics-export-port 8080 &&
+      -c "rzr-aikit cluster run --metrics-export-port 8080 &&
       jupyter lab --NotebookApp.token='' --NotebookApp.password='' --ip=0.0.0.0 --port=8888 "
     environment:
       # HuggingFace token for model downloads (set in .env file or shell)

@@ -1,8 +1,6 @@
 import pynvml
 import sys
-# TODO Remove this hack when conda venv gets removed
-sys.path.append('/home/Razer/miniconda3/envs/torch291_cuda129/lib/python3.12/site-packages')
-from util.mlib import get_device_memory_info_with_fallback
+from rzr_aikit.utils.mlib import get_device_memory_info_with_fallback
 
 # Global cache for NVML static info (bus id, uuid, total mem, etc.)
 _GPU_NVML_INFO = None

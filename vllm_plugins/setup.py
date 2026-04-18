@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='vllm-plugins',
-    version='0.1.0',
+    version='0.1.1',
     description='Clean vLLM modifications via the plugin system',
     packages=find_packages(),
     install_requires=[

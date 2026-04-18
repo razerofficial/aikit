@@ -1,0 +1,140 @@
+from pynvml import * # functions are prefixed so no namespace pollution
+from prometheus_client.parser import text_string_to_metric_families
+import logging
+import urllib.request
+from urllib.error import URLError
+
+logger = logging.getLogger(__name__)
+
+def get_device_memory_info_with_fallback(handle):
+    """
+    Get GPU memory information with PyTorch CUDA fallback for NVML compatibility.
+    
+    This function attempts to retrieve memory info via NVML first. If NVML reports
+    the operation as not supported (e.g., on GB10/Grace Blackwell GPUs where NVML
+    may have limited support), it falls back to using PyTorch's CUDA API by matching
+    the device via PCI bus address.
+    
+    Args:
+        handle: NVML device handle
+        
+    Returns:
+        c_nvmlMemory_t object with total, free, and used memory in bytes
+        
+    Raises:
+        RuntimeError: If the NVML device is not visible to CUDA
+    """
+    from torch import cuda
+    try:
+        return nvmlDeviceGetMemoryInfo(handle)
+    except NVMLError_NotSupported:
+        pass
+    pci = nvmlDeviceGetPciInfo(handle).busId.lower()
+    index = -1
+    for i in range(cuda.device_count()):
+        device_properties = cuda.get_device_properties(i)
+        domain = device_properties.pci_domain_id
+        bus = device_properties.pci_bus_id
+        device = device_properties.pci_device_id
+        pci_addr = f"{domain:08x}:{bus:02x}:{device:02x}.0"
+        if pci_addr == pci:
+            index = i
+    if index == -1:
+        raise RuntimeError("NVML device not visible to CUDA")
+    info = cuda.mem_get_info(f"cuda:{index}")
+    ret = c_nvmlMemory_t()
+    ret.free = info[0]
+    ret.total = info[1]
+    ret.used = info[1] - info[0]
+    return ret
+
+def get_cuda_total_vram(distributed: bool = False) -> float:
+    """
+    Get total VRAM that can be used for loading a model
+    """
+    from gpu_discovery.discover import discover_gpus
+
+    all_gpus = []
+    result = discover_gpus()
+
+    if distributed:
+        if "FAIL" in result:
+            return -1.0
+        
+        try:
+            nodes = result["ray"]
+            for node in nodes:
+                all_gpus.extend(node["gpus"])
+        except (KeyError, TypeError):
+            return 0.0
+    else:
+        try:
+            gpus = result["local"]
+            all_gpus.extend(gpus)
+        except Exception:
+            nvmlInit()
+            device_count = nvmlDeviceGetCount()
+            handles = [nvmlDeviceGetHandleByIndex(i) for i in range(device_count)]
+            mem_infos = [get_device_memory_info_with_fallback(handle) for handle in handles]
+            return sum(info.total for info in mem_infos)
+        
+    total_memory = sum(
+        gpu["total_memory"] for gpu in all_gpus if gpu["total_memory"] is not None
+    )
+    return total_memory
+
+def get_cuda_gpu_infos():
+    nvmlInit() # almost instant
+    def get_info_from_handle(handle):
+        return {
+            "name": nvmlDeviceGetName(handle),
+            "uuid": nvmlDeviceGetUUID(handle),
+            # "serial": nvmlDeviceGetSerial(handle),
+            "mem": get_device_memory_info_with_fallback(handle),
+        }
+    device_count = nvmlDeviceGetCount()
+    handles = [nvmlDeviceGetHandleByIndex(i) for i in range(device_count)]
+    return map(get_info_from_handle, handles)
+
+def get_metrics():
+    try:
+        with urllib.request.urlopen("http://localhost:8000/metrics") as u:
+            metrics = u.read().decode('utf-8')
+        return list(text_string_to_metric_families(metrics))
+    except URLError:
+        return []
+    
+def check_model_fit(memory: float, weight_size: int, dtype: str | None) -> str:
+    import re
+
+    try:
+        extracted_dtype = int(re.search(r"\d+", dtype).group())
+    except (AttributeError, ValueError):
+        print(f"Warning: Unable to extract bits from dtype '{dtype}'. Assuming 16-bit.")
+        extracted_dtype = 16
+    except TypeError:
+        pass
+        
+    if weight_size * 1.2 < memory:
+        fit = "✅ Yes"
+    elif dtype and weight_size * (4 / extracted_dtype) * 1.2 < memory: # only for LLMs
+        fit = "🟡 Limited"
+    else:
+        fit = "❌ No"
+    return fit
+
+
+from openai import OpenAI, APIConnectionError, APITimeoutError
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="aaa", max_retries=0, timeout=5.0)
+
+def get_running_models():
+    try:
+        return client.models.list()
+    except (APIConnectionError, APITimeoutError):
+        return []
+
+def comp_generate(*args, **kwargs):
+    return client.completions.create(*args, **kwargs)
+
+def image_generate(*args, **kwargs):
+    return client.images.generate(*args, **kwargs)

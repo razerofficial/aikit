@@ -67,6 +67,11 @@ fi
 ```bash
 # Build AIKit image
 cd docker_build_aikit
+
+# Remove old log files to ensure we're judging a fresh build
+rm -f log.txt log_test.txt
+echo "Removed old log files"
+
 ./make.sh
 
 # Wait for build to complete - monitor log for "Successfully tagged"
@@ -100,9 +105,9 @@ docker run -it \
 
 **Important: Interactive Execution**
 - ALL testing commands should be executed live in this interactive container session
-- The conda environment activates automatically in interactive mode via `.bashrc`
+- The environment is configured automatically via shell initialization scripts
 - Stay in the original interactive session - avoid using `docker exec`
-- Verify environment: `which python` should show path inside conda environment
+- Verify environment: `which python` should show the system Python with packages installed
 
 ### Phase 3: Sequential Model Testing
 

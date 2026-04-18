@@ -19,7 +19,8 @@ def gen_gencode(arches):
     return flags
 
 # Default arch list, overridable with env var
-arch_list = os.environ.get("GPU_DISCOVERY_ARCHS", "89,90,100,100a,101,103,120,120a,121")
+# 101 renamed to 110 in 13.0
+arch_list = os.environ.get("GPU_DISCOVERY_ARCHS", "89,90,100,100a,110,103,120,120a,121")
 arches = [x.strip() for x in arch_list.split(",") if x.strip()]
 
 here = Path(__file__).parent.resolve()

@@ -24,33 +24,41 @@ else
     IMAGE_NAME=razer:aikit
 fi
 
+# docker/buildx#1170
+docker run --privileged --rm tonistiigi/binfmt --install all
+docker run --rm --privileged multiarch/qemu-user-static --reset -p yes -c yes
+
 # gitlab CI
 if [ -n "$CI" ]; then
     if [ -n "$1" ]; then
         # Test build: use official vllm image
-        docker build \
+        docker buildx build \
         --target "$1" \
+        --platform linux/amd64,linux/arm64 \
         -f docker_build_aikit/Dockerfile_aikit .
     
     else
         # CI build: use official vllm image and push final aikit image
         docker buildx build \
         --target rzr-aikit \
+        --platform linux/amd64,linux/arm64 \
         --tag "$IMAGE_NAME" \
         --provenance=true --sbom=true --push \
         -f docker_build_aikit/Dockerfile_aikit .
-        docker buildx imagetools inspect "$IMAGE_NAME" --format "{{ json .SBOM.SPDX }}" > sbom.spdx.json
+        docker buildx imagetools inspect "$IMAGE_NAME" --format '{{ if .SBOM.SPDX }}{{ json .SBOM.SPDX }}{{ else }}{{ $found := false }}{{ range .SBOM }}{{ if not $found }}{{ json .SPDX }}{{ $found = true }}{{ end }}{{ end }}{{ end }}' > sbom.spdx.json
     fi
 # local build
 else
     if [ -n "$1" ]; then
-        docker build \
+        docker buildx build \
         --target "$1" \
+        --platform linux/amd64,linux/arm64 \
         -f docker_build_aikit/Dockerfile_aikit . \
         1> docker_build_aikit/log_test.txt 2>&1
     else
-        docker build \
+        docker buildx build \
         --target rzr-aikit \
+        --platform linux/amd64,linux/arm64 \
         --tag "$IMAGE_NAME" \
         -f docker_build_aikit/Dockerfile_aikit . \
         1> docker_build_aikit/log.txt 2>&1

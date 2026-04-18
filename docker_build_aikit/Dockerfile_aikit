@@ -6,118 +6,60 @@
 # custom GPU capabilities.
 # =============================================================================
 
+# TODO: Implement auto-detection of CUDA version from host system
 # Build arguments for version pinning
-ARG CUDA_BUILD_IMAGE=nvidia/cuda:12.9.1-devel-ubuntu20.04
-ARG VLLM_IMAGE=vllm/vllm-openai:v0.14.1
+ARG CUDA_VERSION_MAJOR=13
+ARG CUDA_VERSION_MINOR=0
+ARG VLLM_VERSION=v0.18.0
+ARG VLLM_IMAGE=vllm/vllm-openai:$VLLM_VERSION-cu${CUDA_VERSION_MAJOR}${CUDA_VERSION_MINOR}
 
-# =============================================================================
-# Stage 1: Base Environment Setup
-# =============================================================================
-# Extends official vLLM image with conda environment and user configuration
 FROM ${VLLM_IMAGE} AS base
+ARG CUDA_VERSION_MAJOR CUDA_VERSION_MINOR
+# Environment variables inherited by all dependent stages
 ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
-
-# Environment configuration
-ARG USERNAME=Razer
-ARG VIRTUAL_ENV=torch291_cuda129
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install essential system packages
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        git \
-        iproute2 \
-        net-tools \
-        wget && \
-    rm -rf /var/lib/apt/lists/*
-
-# Create non-root user with sudo privileges for security
-RUN useradd -m -s /bin/bash ${USERNAME} && \
-    usermod -aG sudo ${USERNAME} && \
-    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-
-# Switch to non-root user for remaining operations
-USER ${USERNAME}
-WORKDIR /home/${USERNAME}
-
-# Configure pip
+ENV UV_NO_CACHE=1
 ENV PIP_NO_CACHE_DIR=true
-
-# Install Miniconda for Python environment management
-ENV CONDA_DIR=/home/${USERNAME}/miniconda3
-ENV PATH=${CONDA_DIR}/bin:${PATH}
-
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-$(uname -m).sh -O anaconda.sh && \
-    bash anaconda.sh -b -p ${CONDA_DIR} && \
-    rm anaconda.sh && \
-    conda clean -afy
-
-# Initialize and configure conda
-RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
-    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r && \
-    conda init bash && \
-    conda config --add channels defaults && \
-    conda update -n base conda -y && \
-    conda clean -afy
-
-# Save base environment paths for later restoration
-SHELL ["/bin/bash", "-c"]
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate base && \
-    echo "base PATH : ${PATH}" && \
-    echo "export CONDA_BASE_PATH=${PATH}" >> ~/.bashrc && \
-    echo "export CONDA_BASE_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> ~/.bashrc && \
-    echo "export CONDA_BASE_LIBRARY_PATH=${LIBRARY_PATH}" >> ~/.bashrc
-
-# Create isolated Python 3.12 environment
-RUN conda create -n ${VIRTUAL_ENV} python=3.12 -y && \
-    echo "conda activate ${VIRTUAL_ENV}" >> ~/.bashrc
-
-ENV CONDA_VIRTUAL_ENV=${VIRTUAL_ENV}
-
-# Configure Python path to find vLLM distribution packages
-RUN echo '/usr/local/lib/python3.12/dist-packages/' > \
-    /home/${USERNAME}/miniconda3/envs/${VIRTUAL_ENV}/lib/python3.12/site-packages/vllm.pth
+ENV DEBIAN_FRONTEND=noninteractive
+# TODO: Implement auto-detection of CUDA installation path
+ENV CUDA_HOME=/usr/local/cuda-${CUDA_VERSION_MAJOR}.${CUDA_VERSION_MINOR}
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # =============================================================================
 # Stage 2: GPU Tools Build
 # =============================================================================
 # Compiles custom GPU discovery module with CUTLASS support and vLLM plugins
 # Uses CUDA development environment for building GPU-accelerated extensions
-FROM ${CUDA_BUILD_IMAGE} AS build_gpu_tools
+FROM base AS build_gpu_tools
+# Using base image instead of CUDA devel image to maintain Python package compatibility
+# This approach keeps dependency versions synchronized with the vLLM base image
 
-ARG USERNAME=Razer
-ARG VIRTUAL_ENV=torch291_cuda129
+ARG CUDA_VERSION_MAJOR CUDA_VERSION_MINOR
+# Install CUDA development libraries required for building GPU extensions
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends cuda-libraries-dev-${CUDA_VERSION_MAJOR}-${CUDA_VERSION_MINOR} && \
+    rm -rf /var/lib/apt/lists/*
 
-ENV CONDA_DIR=/home/${USERNAME}/miniconda3
-
-# Copy build dependencies from base stage
+# Copy GPU tool source code for compilation
 COPY gpu_discovery gpu_discovery
-COPY --chown=${USERNAME}:${USERNAME} vllm_plugins vllm_plugins
-COPY --from=base /home/${USERNAME}/miniconda3 /home/${USERNAME}/miniconda3
-COPY --from=base /usr/local/lib/python3.12/ /usr/local/lib/python3.12/
+COPY vllm_plugins vllm_plugins
 
 # Build GPU discovery wheel
-SHELL ["/bin/bash", "-c"]
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    pip install build && \
+RUN pip install build && \
     echo 'Building GPU discovery module...' && \
     cd gpu_discovery && \
+    # TODO: Verify if MAX_JOBS override is necessary when using Ninja build system
     export MAX_JOBS=$(nproc) && \
-    python -m build --no-isolation --wheel --outdir ../gpu-discovery-dist --verbose && \
+    python3 -m build --no-isolation --wheel --outdir ../gpu-discovery-dist --verbose && \
     cd .. && \
-    pip install gpu-discovery-dist/*.whl --verbose && \
+    python3 -m pip install gpu-discovery-dist/*.whl --verbose && \
     echo 'GPU discovery module built successfully'
 
 # Build GPU ordering (vLLM plugins) wheel
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    echo 'Building GPU ordering (vLLM plugins)...' && \
+RUN echo 'Building GPU ordering (vLLM plugins)...' && \
     cd vllm_plugins && \
-    python -m build --no-isolation --wheel --outdir ../gpu-ordering-dist --verbose && \
+    python3 -m build --no-isolation --wheel --outdir ../gpu-ordering-dist --verbose && \
     cd .. && \
-    pip install gpu-ordering-dist/*.whl --verbose && \
+    python3 -m pip install gpu-ordering-dist/*.whl --verbose && \
     echo 'GPU ordering (vLLM plugins) built successfully'
 
 # =============================================================================
@@ -125,76 +67,32 @@ RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
 # =============================================================================
 # Adds distributed computing, audio processing, and custom tooling to vLLM
 FROM base AS vllm_extended
+ARG VLLM_VERSION
 
-ARG USERNAME=Razer
-ARG VIRTUAL_ENV=torch291_cuda129
-
-ENV CUDA_HOME=/usr/local/cuda-12.9
-ENV OWNER=${USERNAME}
-ENV BASE_WORKDIR=/home/${USERNAME}
-ENV CONDA_DIR=${BASE_WORKDIR}/miniconda3
-
-# Install Ray with all optional dependencies for distributed workloads at system level
-# NOTE: Ray and vLLM MUST be installed at system level (/usr/bin/python3) instead of conda
-# Installing them in conda while vLLM base is in system causes version conflicts and import errors
-# Mixed system/conda installations lead to library path conflicts and segmentation faults
-
-USER root
-
-SHELL ["/bin/bash", "-c"]
-RUN RAY_VERSION=$(/usr/bin/python3 -c "import importlib.metadata; print(importlib.metadata.version('ray'))") && \
-    echo "Detected Ray version: ${RAY_VERSION}" && \
-    /usr/bin/pip3 install --no-cache-dir "ray[all]==${RAY_VERSION}"
+# Install Ray for distributed computing and cluster management
+RUN uv pip install --system "ray[all]"
 
 # Install vLLM audio extension for multimodal capabilities at system level
-RUN VLLM_VERSION=$(/usr/bin/python3 -c "import importlib.metadata; print(importlib.metadata.version('vllm'))") && \
-    echo "Detected vLLM version: ${VLLM_VERSION}" && \
-    /usr/bin/pip3 install --no-cache-dir "vllm[audio]==${VLLM_VERSION}"
-
-# Install vLLM omni and preview package for images
-ARG TARGETARCH
-ENV CUDA_HOME=/usr/local/cuda-12.9
-RUN apt-get update && apt-get install -y ninja-build
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-    export FLASH_ATTN_CUDA_ARCHS=121 && \
-    source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    git clone --recursive https://github.com/ZJY0516/fa-fwd.git && \
-    cd fa-fwd && \
-    git checkout d879a173f9e20084d381ae31ceeee8e24589cb68 && \
-    sed -i 's/# set_compile_params/set_compile_params/' build_fa3.sh && \
-    bash build_fa3.sh && \
-    /usr/bin/pip3 install --no-cache-dir build/*.whl && \
-    cd .. && \
-    rm -rf fa-fwd; \
-    fi
-
-RUN /usr/bin/pip3 install --no-cache-dir vllm-omni==v0.14.0
-RUN apt-get update && apt-get install -y chafa
+RUN uv pip install --system "vllm[audio]==${VLLM_VERSION}" && \
+    uv pip install --system vllm-omni==${VLLM_VERSION}
+# Install chafa for terminal-based image rendering
+RUN apt-get update && apt-get install -y chafa && rm -rf /var/lib/apt/lists/*
 
 # Copy operational scripts and benchmarking tools
-COPY --chown=${USERNAME}:${USERNAME} docker_build_aikit/scripts/ ${BASE_WORKDIR}/scripts/
-COPY --chown=${USERNAME}:${USERNAME} docker_build_aikit/benchmarks/ ${BASE_WORKDIR}/benchmarks/
+COPY docker_build_aikit/scripts/* /usr/local/bin/
+COPY docker_build_aikit/benchmarks/ /var/aikit/benchmarks/
 
 # Install GPU tools (gpu_discovery + vllm_plugins) from build stage
-# NOTE: Installing only to system Python (like vLLM and Ray) for consistency
-COPY --from=build_gpu_tools --chown=${USERNAME}:${USERNAME} \
-    gpu-discovery-dist ${BASE_WORKDIR}/gpu-discovery-dist
-COPY --from=build_gpu_tools --chown=${USERNAME}:${USERNAME} \
-    gpu-ordering-dist ${BASE_WORKDIR}/gpu-ordering-dist
+# TODO: Investigate Docker COPY context limitations preventing relative path usage
+COPY --from=build_gpu_tools /vllm-workspace/gpu-discovery-dist/ gpu-discovery-dist/
+COPY --from=build_gpu_tools /vllm-workspace/gpu-ordering-dist/ gpu-ordering-dist/
 
-# Install to system Python (accessible by Ray workers and conda via .pth file)
-RUN /usr/bin/pip3 install ${BASE_WORKDIR}/gpu-discovery-dist/*.whl --verbose && \
-    /usr/bin/pip3 install ${BASE_WORKDIR}/gpu-ordering-dist/*.whl --verbose && \
-    rm -rf ${BASE_WORKDIR}/gpu-discovery-dist ${BASE_WORKDIR}/gpu-ordering-dist
+RUN uv pip install --system gpu-discovery-dist/*.whl --verbose && \
+    uv pip install --system gpu-ordering-dist/*.whl --verbose && \ 
+    rm -rf gpu-discovery-dist gpu-ordering-dist
 
-# Install conda environment hooks
-COPY --chown=${USERNAME}:${USERNAME} \
-    docker_build_aikit/conda/ ${CONDA_DIR}/envs/${VIRTUAL_ENV}/etc/conda/
-
-USER ${USERNAME}
-
-ENTRYPOINT ["bash"]
+# Copy environment activation scripts for shell session initialization
+COPY docker_build_aikit/env-init/activate.d/* /etc/profile.d/
 
 # =============================================================================
 # Stage 4: Razer AIKit Package Build
@@ -202,50 +100,31 @@ ENTRYPOINT ["bash"]
 # Builds the core rzr-aikit Python wheel for distribution
 FROM vllm_extended AS build_rzr_aikit
 
-ARG USERNAME=Razer
-ARG VIRTUAL_ENV=torch291_cuda129
-
-ENV OWNER=${USERNAME}
-ENV BASE_WORKDIR=/home/${USERNAME}
-ENV CONDA_DIR=${BASE_WORKDIR}/miniconda3
-
 # Copy source code
-COPY --chown=${OWNER} rzr-aikit ${BASE_WORKDIR}/src
+COPY pyproject.toml poetry.lock* ./
+COPY rzr_aikit rzr_aikit/
 
+# TODO: Review build approach - consider using uv or consolidating build tools
 # Build Python wheel using PEP 517 build system
-SHELL ["/bin/bash", "-c"]
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    pip install build 'poetry-core>=1.0.0' && \
-    cd src && \
-    python -m build --no-isolation --wheel --outdir ../rzr-aikit-dist --verbose && \
+RUN pip install build 'poetry-core>=1.0.0' && \
+    python3 -m build --no-isolation --wheel --outdir rzr-aikit-dist --verbose && \
     echo "rzr-aikit wheel built successfully" && \
-    cd .. && \
     pip install rzr-aikit-dist/*.whl --verbose && \
     echo "rzr-aikit wheel installed successfully"
 
 # =============================================================================
 # Stage 5: Test (Optional)
 # =============================================================================
-# Runs rzr-aikit unit tests - can be built standalone for validation
+# Runs rzr-aikit unit tests - build this stage separately for CI/CD validation
 FROM vllm_extended AS test
 
-ARG USERNAME=Razer
-ARG VIRTUAL_ENV=torch291_cuda129
+# Copy source code and tests
+COPY pyproject.toml poetry.lock* ./
+COPY rzr_aikit rzr_aikit/
+COPY tests tests/
 
-ENV OWNER=${USERNAME}
-ENV BASE_WORKDIR=/home/${USERNAME}
-ENV CONDA_DIR=${BASE_WORKDIR}/miniconda3
-
-# Copy source code for testing
-COPY --chown=${OWNER} rzr-aikit ${BASE_WORKDIR}/src
-
-SHELL ["/bin/bash", "-c"]
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    cd src && \
-    pip install -e . && \
-    pip install pytest pytest-mock && \
+# Install in editable mode with dev dependencies from pyproject.toml, then run model tests
+RUN uv pip install --with dev -e . && \
     cd tests && \
     pytest model
 
@@ -255,18 +134,19 @@ RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
 # Builds custom Jupyter Lab homepage extension for AIKit interface
 FROM build_rzr_aikit AS build_jupyter_extension
 
-COPY --chown=Razer:Razer jupyter_extension /home/Razer/notebooks/jupyter_extension
+COPY jupyter_extension jupyter_extension
 
+# Switch to bash for Node.js installation script compatibility
 SHELL ["/bin/bash", "-c"]
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    pip install build jupyterlab hatchling hatch-nodejs-version hatch-jupyter-builder && \
-    conda install -y conda-forge::nodejs && \
+# Install Node.js 24.x from NodeSource repository
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
+    apt-get update && apt-get install -y nodejs && rm -rf /var/cache/apt/archives /var/lib/apt/lists/* && \
+    uv pip install --system build jupyterlab hatchling hatch-nodejs-version hatch-jupyter-builder && \
     echo 'Building Jupyter extension...' && \
-    cd notebooks/jupyter_extension && \
+    cd jupyter_extension && \
     jlpm install && \
     jlpm build:prod && \
-    python -m build --no-isolation --wheel --outdir ../../rzr-home-dist --verbose && \
+    python3 -m build --no-isolation --wheel --outdir ../rzr-home-dist --verbose && \
     echo 'Jupyter extension built successfully'
 
 # =============================================================================
@@ -275,102 +155,90 @@ RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
 # Clean production image with rzr-aikit, Jupyter, and fine-tuning capabilities
 FROM vllm_extended AS rzr-aikit
 
-ARG USERNAME=Razer
-ARG VIRTUAL_ENV=torch291_cuda129
-
-ENV OWNER=${USERNAME}
-ENV BASE_WORKDIR=/home/${USERNAME}
-ENV CONDA_DIR=${BASE_WORKDIR}/miniconda3
-
-USER ${USERNAME}
-WORKDIR ${BASE_WORKDIR}
-
 # Install rzr-aikit from build stage
-COPY --from=build_rzr_aikit --chown=${OWNER} \
-    ${BASE_WORKDIR}/rzr-aikit-dist ${BASE_WORKDIR}/rzr-aikit-dist
+COPY --from=build_rzr_aikit /vllm-workspace/rzr-aikit-dist/ rzr-aikit-dist/
 
-SHELL ["/bin/bash", "-c"]
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    pip install ${BASE_WORKDIR}/rzr-aikit-dist/*.whl --verbose && \
-    rm -rf ${BASE_WORKDIR}/rzr-aikit-dist
+RUN uv pip install --system rzr-aikit-dist/*.whl --verbose && \
+    rm -rf rzr-aikit-dist
 
-# Install JupyterLab with bash kernel support
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    pip install --no-cache-dir jupyterlab bash_kernel && \
-    python -m bash_kernel.install
+# Install JupyterLab with bash kernel support for interactive shell notebooks
+RUN uv pip install --system jupyterlab bash_kernel && \
+    python3 -m bash_kernel.install
 
-# Copy Jupyter notebooks
-ENV JUPYTER_NOTEBOOK_DIR="${BASE_WORKDIR}/notebooks/"
-COPY --chown=${OWNER} notebooks/ "${JUPYTER_NOTEBOOK_DIR}/"
+# Create world-writable notebooks directory for multi-user access
+RUN mkdir -m 1777 -p /var/aikit/notebooks && chmod 1777 /var/aikit/
+
+# Copy example Jupyter notebooks
+COPY --chmod=ugo=rwX notebooks /var/aikit/notebooks
 
 # Install GPU automation CLI utilities
-COPY --chown=${OWNER} \
-    rzr-aikit/util/gpu_*.py ${CONDA_DIR}/envs/${VIRTUAL_ENV}/bin/
+COPY rzr_aikit/utils/gpu_*.py /usr/local/bin/
 
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    chmod +x ${CONDA_DIR}/envs/${VIRTUAL_ENV}/bin/gpu_*.py && \
-    ln -s ${CONDA_DIR}/envs/${VIRTUAL_ENV}/bin/gpu_discover.py \
-          ${CONDA_DIR}/envs/${VIRTUAL_ENV}/bin/gpu-discover && \
-    ln -s ${CONDA_DIR}/envs/${VIRTUAL_ENV}/bin/gpu_select.py \
-          ${CONDA_DIR}/envs/${VIRTUAL_ENV}/bin/gpu-select && \
-    ln -s ${CONDA_DIR}/envs/${VIRTUAL_ENV}/bin/gpu_filter.py \
-          ${CONDA_DIR}/envs/${VIRTUAL_ENV}/bin/gpu-filter
+RUN chmod +x /usr/local/bin/gpu_*.py && \
+    ln -s /usr/local/bin/gpu_discover.py \
+          /usr/local/bin/gpu-discover && \
+    ln -s /usr/local/bin/gpu_select.py \
+          /usr/local/bin/gpu-select && \
+    ln -s /usr/local/bin/gpu_filter.py \
+          /usr/local/bin/gpu-filter
 
 # Install LlamaFactory for model fine-tuning
 # NOTE: Complex dependency resolution required to maintain compatibility with base image
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    cd ${BASE_WORKDIR} && \
-    git clone --depth 1 https://github.com/hiyouga/LLaMA-Factory.git && \
-    cd LLaMA-Factory && \
-    pip install hatchling && \
-    pip install -I \
-        "websockets<16.0" \
-        "pydantic_core==2.41.4" \
-        "pillow==11.3.0" \
-        "fsspec==2025.3.0" \
-        "dill==0.3.8" \
-        "aiofiles==24.1.0" \
-        "pydantic==2.12.3" \
-        "transformers==4.57.1" \
-        "accelerate==1.11.0" && \
-    pip install ".[torch,metrics]" --no-build-isolation && \
-    pip uninstall -y torch numpy && \
-    # TODO Investigate this behaviour
-    [ "$(uname -m)" = "aarch64" ] || pip freeze | grep "nvidia-.*-cu12" | xargs pip uninstall -y && \
-    pip install --no-cache-dir bitsandbytes && \
-    cd .. && \
-    rm -rf LLaMA-Factory
+RUN uv pip install --system llamafactory
 
 # Install custom Jupyter extension
-COPY --from=build_jupyter_extension --chown=${OWNER} \
-    ${BASE_WORKDIR}/rzr-home-dist ${BASE_WORKDIR}/rzr-home-dist
+COPY --from=build_jupyter_extension /vllm-workspace/rzr-home-dist rzr-home-dist
 
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    pip install ${BASE_WORKDIR}/rzr-home-dist/*.whl --verbose && \
-    rm -rf ${BASE_WORKDIR}/rzr-home-dist && \
-    jupyter labextension disable @jupyterlab/launcher-extension && \
-    mkdir -p ~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/ && \
-    echo '{"theme": "JupyterLab Dark"}' > \
-        ~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
+# TODO: Validate system-level JupyterLab settings override behavior
+RUN uv pip install --system rzr-home-dist/*.whl --verbose && \
+    rm -rf rzr-home-dist && \
+    jupyter labextension disable --level system @jupyterlab/launcher-extension && \
+    mkdir -p /usr/local/share/jupyter/lab/settings/ && \
+    echo '{"@jupyterlab/apputils-extension:themes":{"theme":"JupyterLab Dark"}}' > \
+        /usr/local/share/jupyter/lab/settings/overrides.json && \
+    echo 'from pathlib import Path\nc.FileContentsManager.preferred_dir = str(Path.home() / "notebooks")' > \
+        /usr/local/etc/jupyter/jupyter_lab_config.py
 
-# Configure environment variables and Ray workarounds
-RUN echo "export RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO=0" >> ~/.bashrc && \
-    # Ensures consistent GPU ordering across CUDA operations
-    echo "export CUDA_DEVICE_ORDER=PCI_BUS_ID" >> ~/.bashrc && \
-    # Disables Ray's log deduplication for better debugging visibility
-    echo "export RAY_DEDUP_LOGS=0" >> ~/.bashrc && \
-    # Cleans stale Ray cluster metadata on container restart/login
-    echo 'pgrep ray > /dev/null || rm -f /tmp/ray/ray_current_cluster' >> ~/.bashrc
+# Ray and CUDA environment configuration
+# - RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO: Preserve CUDA_VISIBLE_DEVICES=0 in Ray
+# - CUDA_DEVICE_ORDER: Use PCI bus ordering for consistent GPU enumeration
+# - RAY_DEDUP_LOGS: Disable log deduplication for debugging clarity
+ENV RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO=0 \
+    CUDA_DEVICE_ORDER=PCI_BUS_ID \
+    RAY_DEDUP_LOGS=0
 
+# TODO: Verify if pynvml removal is still necessary with current PyTorch version
 # Remove pynvml to suppress PyTorch compatibility warnings
-RUN source ${CONDA_DIR}/etc/profile.d/conda.sh && \
-    conda activate ${VIRTUAL_ENV} && \
-    pip uninstall --yes pynvml
+RUN uv pip uninstall --system pynvml
+
+# TODO: Evaluate necessity of git and wget for end-user environments
+# Install essential system packages
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        git \
+        iproute2 \
+        net-tools \
+        wget && \
+    rm -rf /var/lib/apt/lists/*
+
+ARG USERNAME=Razer
+# Create non-root user with sudo privileges for security
+# Make the home directory a shared 1777 folder so that --user works
+RUN useradd -m -s /bin/bash -d /var/aikit/ ${USERNAME} && \
+    usermod -aG sudo ${USERNAME} && \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Switch to non-root user for remaining operations
+USER ${USERNAME}:${USERNAME}
+WORKDIR /var/aikit
+ENV HOME=/var/aikit
+
+# Otherwise permission is wrong on bind mount
+# TODO: Investigate UID/GID remapping solution for bind mount permissions
+RUN mkdir -m 777 ~/.cache/
+RUN touch ~/.hushlogin
 
 # Default entrypoint provides bash shell for interactive use
-ENTRYPOINT ["bash"]
+# Use login shell for /etc/profile scripts. Entrypoint is executed exactly once for Docker.
+ENTRYPOINT ["/usr/bin/env"]
+CMD ["bash", "-l"]

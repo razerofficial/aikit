@@ -1,3 +1,4 @@
+import inspect
 import vllm.v1.engine.utils as utils_module
 from vllm.v1.engine.utils import CoreEngineProcManager
 from typing import List, Dict, Any, Tuple, Optional, Callable
@@ -39,10 +40,7 @@ def build_target_gpu_order(uuid_map: Dict[str, Dict[str, Any]], gpu_uuid_order: 
     return device_str, len(device_ids)
 
 
-def razer_run_engine_core(*args,
-                           dp_rank: int = 0,
-                           local_dp_rank: int = 0,
-                           **kwargs):
+def razer_run_engine_core(vllm_config: VllmConfig):
     import os
     pid = os.getpid()
     print(f"razer_run_engine_core pid = {pid}")
@@ -62,7 +60,7 @@ def razer_run_engine_core(*args,
         target_gpu_order, gpu_count = build_target_gpu_order(uuid_map, gpu_uuid_order)
         print(f"target_gpu_order = {target_gpu_order} gpu_count = {gpu_count}")
 
-        world_size = kwargs['vllm_config'].parallel_config.world_size
+        world_size = vllm_config.parallel_config.world_size
         print(f"world_size = {world_size}")
 
         if gpu_count >= world_size:
@@ -70,37 +68,39 @@ def razer_run_engine_core(*args,
         else:
             print("CUDA_VISIBLE_DEVICES is NOT set")
 
-    from vllm.v1.engine.core import EngineCoreProc
-    EngineCoreProc.run_engine_core(*args, dp_rank=dp_rank, local_dp_rank=local_dp_rank, **kwargs)
-
 
 class RazerCoreEngineProcManager(CoreEngineProcManager):
-     def __init__(
-        self,
-        target_fn: Callable,
-        local_engine_count: int,
-        start_index: int,
-        local_start_index: int,
-        vllm_config: VllmConfig,
-        local_client: bool,
-        handshake_address: str,
-        executor_class: type[Executor],
-        log_stats: bool,
-        client_handshake_address: Optional[str] = None,
-    ):
+     def __init__(self, *args, **kwargs):
         import os
         pid = os.getpid()
         print(f"RazerCoreEngineProcManager __init__ pid = {pid}")
-        print(f"RazerCoreEngineProcManager target = {target_fn} pid = {pid}")
+
+        # Dynamically bind the passed arguments to the base class signature
+        sig = inspect.signature(CoreEngineProcManager.__init__)
+
+        # self must be passed because __init__ expects it
+        bound_args = sig.bind(self, *args, **kwargs)
+
+        # Apply defaults in case they weren't explicitly passed
+        bound_args.apply_defaults()
+
+        # Safely extract exactly the arguments required by name
+        vllm_config = bound_args.arguments.get('vllm_config')
+        executor_class = bound_args.arguments.get('executor_class')
+
         print(f"RazerCoreEngineProcManager executor_class = {executor_class} pid = {pid}")
 
         from vllm.v1.executor.abstract import UniProcExecutor
         if executor_class is UniProcExecutor:
             print("Executor is exactly UniProcExecutor")
-            super().__init__(razer_run_engine_core, local_engine_count, start_index, local_start_index, vllm_config, local_client, handshake_address, executor_class, log_stats, client_handshake_address)
+
+            if vllm_config:
+                razer_run_engine_core(vllm_config)
+
+            super().__init__(*args, **kwargs)
         else:
             print("Executor is Not UniProcExecutor")
-            super().__init__(target_fn, local_engine_count, start_index, local_start_index, vllm_config, local_client, handshake_address, executor_class, log_stats, client_handshake_address)
+            super().__init__(*args, **kwargs)
 
 
 utils_module.CoreEngineProcManager = RazerCoreEngineProcManager

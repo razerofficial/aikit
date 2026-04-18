@@ -10088,7 +10088,7 @@ Apache-2.0
 
 ---
 
-### [conda (25.7.0)](https://github.com/conda/conda)
+### [contourpy (1.3.3)](https://pypi.org/project/contourpy/)
 
 
 #### Declared Licenses
@@ -10148,7 +10148,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ---
 
-### [conda-content-trust (0.2.0)](https://github.com/conda/conda-content-trust)
+### [contourpy (1.3.3)](https://pypi.org/project/contourpy/)
 
 
 #### Declared Licenses
@@ -10178,7 +10178,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ---
 
-### [conda-package-handling (2.4.0)](https://github.com/conda/conda-package-handling)
+### [contourpy (1.3.3)](https://pypi.org/project/contourpy/)
 
 
 #### Declared Licenses
@@ -10248,7 +10248,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ---
 
-### [conda_package_streaming (0.12.0)](https://pypi.org/project/conda_package_streaming/)
+### [contourpy (1.3.3)](https://pypi.org/project/contourpy/)
 
 
 #### Declared Licenses

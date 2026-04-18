@@ -16,6 +16,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
   optional: [ILayoutRestorer],
   activate: (app: JupyterFrontEnd, docManager: IDocumentManager, labShell: ILabShell, restorer: ILayoutRestorer | null) => {
     const open = async (path: string) => {
+      // path = "/var/aikit/" + path;
       await app.commands.execute('docmanager:open', { path });
     };
 
