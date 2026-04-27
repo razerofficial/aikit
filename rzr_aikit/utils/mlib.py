@@ -134,7 +134,9 @@ def get_running_models():
         return []
 
 def comp_generate(*args, **kwargs):
+    kwargs.setdefault("timeout", 600.0)
     return client.completions.create(*args, **kwargs)
 
 def image_generate(*args, **kwargs):
+    kwargs.setdefault("timeout", 600.0)
     return client.images.generate(*args, **kwargs)

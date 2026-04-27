@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "rzr-aikit"
-version = "3.0.2"
+version = "0.3.2"
 description = "A package for Razer GPU compute and AI services"
 authors = ["Razer Inc."]
 license = "Apache-2.0"

@@ -24,6 +24,8 @@ else
     IMAGE_NAME=razer:aikit
 fi
 
+PLATFORM="${2:-linux/amd64,linux/arm64}"
+
 # docker/buildx#1170
 docker run --privileged --rm tonistiigi/binfmt --install all
 docker run --rm --privileged multiarch/qemu-user-static --reset -p yes -c yes
@@ -31,17 +33,17 @@ docker run --rm --privileged multiarch/qemu-user-static --reset -p yes -c yes
 # gitlab CI
 if [ -n "$CI" ]; then
     if [ -n "$1" ]; then
-        # Test build: use official vllm image
+        # Test build
         docker buildx build \
         --target "$1" \
-        --platform linux/amd64,linux/arm64 \
+        --platform "$PLATFORM" \
         -f docker_build_aikit/Dockerfile_aikit .
     
     else
         # CI build: use official vllm image and push final aikit image
         docker buildx build \
         --target rzr-aikit \
-        --platform linux/amd64,linux/arm64 \
+        --platform "$PLATFORM" \
         --tag "$IMAGE_NAME" \
         --provenance=true --sbom=true --push \
         -f docker_build_aikit/Dockerfile_aikit .
@@ -52,13 +54,13 @@ else
     if [ -n "$1" ]; then
         docker buildx build \
         --target "$1" \
-        --platform linux/amd64,linux/arm64 \
+        --platform "$PLATFORM" \
         -f docker_build_aikit/Dockerfile_aikit . \
         1> docker_build_aikit/log_test.txt 2>&1
     else
         docker buildx build \
         --target rzr-aikit \
-        --platform linux/amd64,linux/arm64 \
+        --platform "$PLATFORM" \
         --tag "$IMAGE_NAME" \
         -f docker_build_aikit/Dockerfile_aikit . \
         1> docker_build_aikit/log.txt 2>&1

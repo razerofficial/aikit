@@ -51,16 +51,16 @@ def stop_process(process: psutil.Process):
             with contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(
                 devnull
             ):
-                subprocess.run(
-                    ["bash", "-c", f"exec {pid} 1>/dev/null 2>/dev/null || true"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=1,
-                )
+                # subprocess.run(
+                #     ["bash", "-c", f"exec {pid} 1>/dev/null 2>/dev/null || true"],
+                #     stdout=subprocess.DEVNULL,
+                #     stderr=subprocess.DEVNULL,
+                #     timeout=1,
+                # )
                 process.terminate()
 
                 # 2. Wait for the process to die
-                process.wait(timeout=5)  # Wait up to 5 seconds
+                process.wait(timeout=15)  # Wait up to 15 seconds
 
         print(f"--> Process {pid} stopped successfully.")
 
@@ -86,7 +86,7 @@ def stop():
     Terminate a running model inference server.
 
     This command searches for and stops all running vLLM server processes. It
-    attempts a graceful shutdown first (SIGTERM), waiting up to 5 seconds. If the
+    attempts a graceful shutdown first (SIGTERM), waiting up to 15 seconds. If the
     process doesn't terminate gracefully, it will force kill (SIGKILL). If multiple
     vLLM servers are running, all will be stopped sequentially.
 

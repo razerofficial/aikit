@@ -124,7 +124,8 @@ COPY rzr_aikit rzr_aikit/
 COPY tests tests/
 
 # Install in editable mode with dev dependencies from pyproject.toml, then run model tests
-RUN uv pip install --with dev -e . && \
+RUN uv pip install --system -e . && \
+    uv pip install --system pytest pytest-mock && \
     cd tests && \
     pytest model
 

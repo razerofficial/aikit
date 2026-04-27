@@ -15,7 +15,7 @@ test:
     - docker buildx create --name ci-builder --driver docker-container --driver-opt image=moby/buildkit:latest --use
     - docker buildx inspect --bootstrap
   script:
-    - /bin/sh docker_build_aikit/make.sh test
+    - /bin/sh docker_build_aikit/make.sh test linux/amd64
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
     - when: manual
