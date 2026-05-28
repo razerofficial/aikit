@@ -8,9 +8,18 @@ from unittest.mock import MagicMock
 # without vllm being installed in the test environment.
 _vllm_omni_registry = MagicMock()
 _vllm_omni_registry._DIFFUSION_MODELS = {}
+_vllm_omni_utils_registry = MagicMock()
+_vllm_omni_utils_registry.is_diffusion_model = MagicMock(return_value=False)
+_vllm_omni_diffusion_utils_hf_utils = MagicMock()
+_vllm_omni_diffusion_utils_hf_utils._looks_like_bagel = MagicMock(return_value=False)
+_vllm_omni_diffusion_utils_hf_utils.is_diffusion_model = MagicMock(return_value=False)
 sys.modules.setdefault("vllm_omni", MagicMock())
 sys.modules.setdefault("vllm_omni.diffusion", MagicMock())
 sys.modules.setdefault("vllm_omni.diffusion.registry", _vllm_omni_registry)
+sys.modules.setdefault("vllm_omni.diffusion.utils", MagicMock())
+sys.modules.setdefault("vllm_omni.diffusion.utils.hf_utils", _vllm_omni_diffusion_utils_hf_utils)
+sys.modules.setdefault("vllm_omni.utils", MagicMock())
+sys.modules.setdefault("vllm_omni.utils.registry", _vllm_omni_utils_registry)
 
 
 # Add the project root directory to Python path

@@ -295,7 +295,7 @@ This guide covers installing and configuring Razer AIKit with validation steps f
      --gpus all \
      --ipc host \
      --network host \
-     --mount type=bind,source=$HOME/.cache/huggingface,target=/home/Razer/.cache/huggingface \
+     --mount type=bind,source=$HOME/.cache/huggingface,target=/var/aikit/.cache/huggingface \
      --env HUGGING_FACE_HUB_TOKEN=<YOUR_TOKEN> \
      razerofficial/aikit:latest
    ```
@@ -421,7 +421,7 @@ docker run -it \
   --restart=unless-stopped \
   --ipc host \
   --network host \
-  --mount type=bind,source=$HOME/.cache/huggingface,target=/home/Razer/.cache/huggingface \
+  --mount type=bind,source=$HOME/.cache/huggingface,target=/var/aikit/.cache/huggingface \
   razerofficial/aikit:latest bash
 
 # Check system resources

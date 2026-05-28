@@ -1,37 +1,42 @@
-[tool.poetry]
+[project]
 name = "rzr-aikit"
-version = "0.3.2"
+version = "0.4.0"
 description = "A package for Razer GPU compute and AI services"
-authors = ["Razer Inc."]
-license = "Apache-2.0"
-packages = [
-    { include = "rzr_aikit" }
+authors = [{ name = "Razer Inc." }]
+license = { text = "Apache-2.0" }
+requires-python = "~=3.12.0" # vllm wants this stricter constraint
+dependencies = [
+    "typer>0.19.2",
+    "numpy>=2.1.2,<3",
+    "psutil>=7.0.0,<8",
+    "transformers>=5.8.0,<6",
+    "accelerate==1.12.0",
+    "nvidia-ml-py>12.575.51",
+    "prometheus-client>0.22.1",
+    "typing-extensions>=4.14.1,<5",
+    "openai>1.97.1",
+    "humanize>=4.14.0,<5",
+    "ray[default]>=2.0",
+    "gradio>=6.13.0,<7",
 ]
-exclude = ["tests", "tests/**/*", "src", "util"]
 
-[tool.poetry.dependencies]
-python = "~3.12" # vllm wants this stricter constraint
-typer = ">0.19.2"
-numpy = "^2.1.2"
-psutil = "^7.0.0"
-transformers = "^4.51.3"
-accelerate = "^1.7.0"
-nvidia-ml-py = ">12.575.51"
-prometheus-client = ">0.22.1"
-typing-extensions = "^4.14.1"
-openai = ">1.97.1"
-humanize = "^4.14.0"
-ray = {version = ">=2.0", extras = ["default"]}
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.4,<9",
+    "pytest-mock>=3.14.1,<4",
+]
 
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.4"
-pytest-mock = "^3.14.1"
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.plugins."console_scripts"]
+[project.scripts]
 rzr-aikit = "rzr_aikit.cli:app"
 run_vllm = "rzr_aikit.utils.run_vllm:main"
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+include = ["rzr_aikit"]
+exclude = ["tests", "tests/**/*", "src", "util"]

@@ -10,7 +10,7 @@
 # Build arguments for version pinning
 ARG CUDA_VERSION_MAJOR=13
 ARG CUDA_VERSION_MINOR=0
-ARG VLLM_VERSION=v0.18.0
+ARG VLLM_VERSION=v0.20.0
 ARG VLLM_IMAGE=vllm/vllm-openai:$VLLM_VERSION-cu${CUDA_VERSION_MAJOR}${CUDA_VERSION_MINOR}
 
 FROM ${VLLM_IMAGE} AS base
@@ -95,22 +95,19 @@ RUN uv pip install --system gpu-discovery-dist/*.whl --verbose && \
 COPY docker_build_aikit/env-init/activate.d/* /etc/profile.d/
 
 # =============================================================================
-# Stage 4: Razer AIKit Package Build
+# Stage 4: Razer AIKit Install (locked)
 # =============================================================================
-# Builds the core rzr-aikit Python wheel for distribution
+# Installs rzr-aikit and its dependencies at exact versions from uv.lock
 FROM vllm_extended AS build_rzr_aikit
 
-# Copy source code
-COPY pyproject.toml poetry.lock* ./
+COPY pyproject.toml uv.lock ./
 COPY rzr_aikit rzr_aikit/
 
-# TODO: Review build approach - consider using uv or consolidating build tools
-# Build Python wheel using PEP 517 build system
-RUN pip install build 'poetry-core>=1.0.0' && \
-    python3 -m build --no-isolation --wheel --outdir rzr-aikit-dist --verbose && \
-    echo "rzr-aikit wheel built successfully" && \
-    pip install rzr-aikit-dist/*.whl --verbose && \
-    echo "rzr-aikit wheel installed successfully"
+# Export pinned requirements from lockfile, then install into system Python
+RUN uv export --frozen --no-dev --no-hashes -o /tmp/rzr-requirements.txt && \
+    uv pip install --system -r /tmp/rzr-requirements.txt && \
+    uv pip install --system --no-deps . && \
+    echo "rzr-aikit installed at locked versions"
 
 # =============================================================================
 # Stage 5: Test (Optional)
@@ -119,13 +116,14 @@ RUN pip install build 'poetry-core>=1.0.0' && \
 FROM vllm_extended AS test
 
 # Copy source code and tests
-COPY pyproject.toml poetry.lock* ./
+COPY pyproject.toml uv.lock ./
 COPY rzr_aikit rzr_aikit/
 COPY tests tests/
 
-# Install in editable mode with dev dependencies from pyproject.toml, then run model tests
-RUN uv pip install --system -e . && \
-    uv pip install --system pytest pytest-mock && \
+# Install at locked versions with dev deps, then run model tests
+RUN uv export --frozen --no-hashes --extra dev -o /tmp/rzr-requirements.txt && \
+    uv pip install --system -r /tmp/rzr-requirements.txt && \
+    uv pip install --system --no-deps . && \
     cd tests && \
     pytest model
 
@@ -154,13 +152,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
 # Stage 7: Final Production Image
 # =============================================================================
 # Clean production image with rzr-aikit, Jupyter, and fine-tuning capabilities
-FROM vllm_extended AS rzr-aikit
-
-# Install rzr-aikit from build stage
-COPY --from=build_rzr_aikit /vllm-workspace/rzr-aikit-dist/ rzr-aikit-dist/
-
-RUN uv pip install --system rzr-aikit-dist/*.whl --verbose && \
-    rm -rf rzr-aikit-dist
+FROM build_rzr_aikit AS rzr-aikit
 
 # Install JupyterLab with bash kernel support for interactive shell notebooks
 RUN uv pip install --system jupyterlab bash_kernel && \
@@ -182,10 +174,6 @@ RUN chmod +x /usr/local/bin/gpu_*.py && \
           /usr/local/bin/gpu-select && \
     ln -s /usr/local/bin/gpu_filter.py \
           /usr/local/bin/gpu-filter
-
-# Install LlamaFactory for model fine-tuning
-# NOTE: Complex dependency resolution required to maintain compatibility with base image
-RUN uv pip install --system llamafactory
 
 # Install custom Jupyter extension
 COPY --from=build_jupyter_extension /vllm-workspace/rzr-home-dist rzr-home-dist
@@ -222,6 +210,9 @@ RUN apt-get update && \
         wget && \
     rm -rf /var/lib/apt/lists/*
 
+# Install LlamaFactory without resolving its dependencies to prevent version downgrades
+RUN uv pip install --system "git+https://github.com/hiyouga/LLaMA-Factory.git" && \
+    uv pip install --system "gradio>=6.13.0,<7"
 ARG USERNAME=Razer
 # Create non-root user with sudo privileges for security
 # Make the home directory a shared 1777 folder so that --user works

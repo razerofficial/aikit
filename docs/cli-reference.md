@@ -17,6 +17,7 @@ $ rzr-aikit [OPTIONS] COMMAND [ARGS]...
 * `metrics`: Retrieve model and hardware metrics.
 * `model`: Commands to manage models.
 * `cluster`: Commands to manage clusters.
+* `ui`: Commands to manage the UI server.
 
 ## `rzr-aikit metrics`
 
@@ -410,40 +411,74 @@ $ rzr-aikit cluster status [OPTIONS]
 
 **Options**:
 
-### rzr-aikit cluster status
+* `--address TEXT`: Override the Ray cluster address to connect to (required for remote clusters or when multiple clusters exist)
+* `--help`: Show this message and exit.
 
-Print the status of the Ray cluster.
+## `rzr-aikit ui`
 
-```bash
-rzr-aikit cluster status [OPTIONS]
+Commands to manage the UI server.
+
+**Usage**:
+
+```console
+$ rzr-aikit ui [OPTIONS] COMMAND [ARGS]...
 ```
 
-**Options:**
-- `--address TEXT` - Override the Ray cluster address to connect to (required for remote clusters or when multiple clusters exist)
+**Options**:
 
-**Description:**
-Displays comprehensive information about the Ray cluster including:
-- Node status (head and workers)
-- Resource availability (CPUs, GPUs, memory)
-- Active tasks and actors
-- Cluster health status
+* `--help`: Display help information including usage syntax, available options, and examples.
 
-If multiple Ray clusters are running or you want to check a remote cluster, use the `--address` option.
+**Commands**:
 
-**Examples:**
-```bash
-rzr-aikit cluster status
-rzr-aikit cluster status --address 192.168.1.100:6379
+* `run`: Launch the UI for image generation.
+* `stop`: Stop the running UI server.
+
+### `rzr-aikit ui run`
+
+Launch the UI for image generation.
+
+This command starts a local Gradio web UI for image generation and audio
+generation, connecting it to a running server endpoint. The Gradio server
+runs as a detached background process so the terminal session is not blocked.
+Use `rzr-aikit ui stop` to stop it.
+
+Examples:
+
+    $ rzr-aikit ui run
+    $ rzr-aikit ui run --server http://127.0.0.1:8000
+    $ rzr-aikit ui run --port 7861
+
+**Usage**:
+
+```console
+$ rzr-aikit ui run [OPTIONS]
 ```
 
----
+**Options**:
 
-## Metrics Command
+* `--server TEXT`: Server URL to connect to for image and audio generation requests  [default: http://localhost:8000]
+* `--port INTEGER`: Local port for the Gradio app  [default: 7860]
+* `--help`: Show this message and exit.
 
-### rzr-aikit metrics
+### `rzr-aikit ui stop`
 
-Retrieve model performance and resource utilization metrics.
+Stop the running UI server.
 
-```bash
-rzr-aikit metrics
+This command searches for and stops the background Gradio UI process that
+was started with `rzr-aikit ui run`. It attempts a graceful shutdown first
+(SIGTERM), waiting up to 5 seconds. If the process does not terminate
+gracefully, it will force kill (SIGKILL).
+
+Examples:
+
+    $ rzr-aikit ui stop
+
+**Usage**:
+
+```console
+$ rzr-aikit ui stop [OPTIONS]
 ```
+
+**Options**:
+
+* `--help`: Show this message and exit.

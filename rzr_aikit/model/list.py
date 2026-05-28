@@ -31,6 +31,7 @@ def list():
         from rzr_aikit.utils.mlib import get_cuda_total_vram, check_model_fit
         from rzr_aikit.utils.ModelInfoFetcher import ModelInfoFetcher
         from rzr_aikit.utils.DiffusionModelInfoFetcher import DiffusionModelInfoFetcher
+        from rzr_aikit.utils.model_classifier import ModelCategory, classify_model
         from huggingface_hub import scan_cache_dir
 
         from rich.table import Table
@@ -67,20 +68,22 @@ def list():
                 data_type = None
                 quant_type = None
 
-                # Try ModelInfoFetcher first
-                try:
-                    fetcher = ModelInfoFetcher(repo.repo_id, allow_internet=False)
-                    weight_size = fetcher.total_bytes
-                    data_type = fetcher.dtype
-                    if fetcher.quant_config:
-                        quant_type = fetcher.quant_config["quant_method"]
+                category = classify_model(repo.repo_id)
 
-                except (ValueError, FileNotFoundError):
-                    # Fallback to DiffusionModelInfoFetcher if ModelInfoFetcher fails
+                if category == ModelCategory.DIFFUSION:
+                    # Standard diffusers pipeline — has model_index.json
                     fetcher = DiffusionModelInfoFetcher(
                         repo.repo_id, allow_internet=False
                     )
                     weight_size = fetcher.total_bytes
+
+                elif category in (ModelCategory.BAGEL, ModelCategory.STANDARD):
+                    # Bagel, standard LLMs, and Mistral-format models (params.json)
+                    fetcher = ModelInfoFetcher(repo.repo_id, allow_internet=False)
+                    weight_size = fetcher.total_bytes
+                    data_type = fetcher.dtype
+                    if fetcher.quant_config:
+                        quant_type = fetcher.quant_config.get("quant_method")
 
                 local = check_model_fit(
                     local_memory, weight_size, quant_type if quant_type else data_type

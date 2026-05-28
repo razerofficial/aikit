@@ -36,6 +36,7 @@ def info(
     """
     from rzr_aikit.utils.ModelInfoFetcher import ModelInfoFetcher
     from rzr_aikit.utils.DiffusionModelInfoFetcher import DiffusionModelInfoFetcher
+    from rzr_aikit.utils.model_classifier import ModelCategory, classify_model
     from rzr_aikit.utils.mlib import get_cuda_total_vram, check_model_fit
     from rzr_aikit.utils.connectivity import check_huggingface_connectivity
     from rzr_aikit import HuggingfaceAccessTokenRequired
@@ -55,8 +56,29 @@ def info(
         local = None
         distributed = "-"
 
-        # Try ModelInfoFetcher first
-        try:
+        category = classify_model(model_name)
+
+        if category == ModelCategory.DIFFUSION:
+            # Standard diffusers pipeline — has model_index.json
+            try:
+                fetcher = DiffusionModelInfoFetcher(
+                    model_name, allow_internet=has_connection
+                )
+            except HuggingfaceAccessTokenRequired:
+                from rzr_aikit.utils.HuggingfaceHubToken import HuggingfaceHubToken
+
+                hug = HuggingfaceHubToken()
+                token = hug.get_access_token()
+                fetcher = DiffusionModelInfoFetcher(
+                    model_name, access_token=token, allow_internet=has_connection
+                )
+
+            if has_connection:
+                huggingface_info = fetcher.model_info
+            weight_size = fetcher.total_bytes
+
+        elif category in (ModelCategory.BAGEL, ModelCategory.STANDARD):
+            # Bagel, standard LLMs, and Mistral-format models (params.json)
             try:
                 fetcher = ModelInfoFetcher(model_name, allow_internet=has_connection)
             except HuggingfaceAccessTokenRequired:
@@ -74,29 +96,6 @@ def info(
                 quant_type = fetcher.quant_config.get("quant_method")
             model_config = fetcher.config
             data_type = fetcher.dtype
-            weight_size = fetcher.total_bytes
-
-        except (ValueError, FileNotFoundError) as infofetcherror:
-            # Fallback to DiffusionModelInfoFetcher if ModelInfoFetcher fails
-            console.print(
-                f"[dim]Initial retrieval failed, retrying as a diffusion model...[/dim]"
-            )
-
-            try:
-                fetcher = DiffusionModelInfoFetcher(
-                    model_name, allow_internet=has_connection
-                )
-            except HuggingfaceAccessTokenRequired:
-                from rzr_aikit.utils.HuggingfaceHubToken import HuggingfaceHubToken
-
-                hug = HuggingfaceHubToken()
-                token = hug.get_access_token()
-                fetcher = DiffusionModelInfoFetcher(
-                    model_name, access_token=token, allow_internet=has_connection
-                )
-
-            if has_connection:
-                huggingface_info = fetcher.model_info
             weight_size = fetcher.total_bytes
 
         local_memory = get_cuda_total_vram()

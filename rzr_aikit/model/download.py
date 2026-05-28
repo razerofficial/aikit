@@ -53,51 +53,45 @@ def check_if_downloaded(model_name: str):
 
 def download_model(model_name: str):
     """Download the model."""
+    from rzr_aikit.utils.model_classifier import ModelCategory, classify_model
+
+    with console.status("Starting model download..."):
+        category = classify_model(model_name)
 
     try:
-        with console.status("Attempting download with vLLM loader..."):
-            from vllm.config import LoadConfig, ModelConfig
-            from vllm.model_executor.model_loader import get_model_loader
+        if category == ModelCategory.STANDARD or category == ModelCategory.BAGEL:
+            with console.status("Attempting download with vLLM loader..."):
+                from vllm.config import LoadConfig, ModelConfig
+                from vllm.model_executor.model_loader import get_model_loader
 
-        model_config = ModelConfig(
-            model=model_name,
-            tokenizer=model_name,
-            tokenizer_mode="auto",
-            trust_remote_code=False,
-            dtype="auto",
-            seed=0,
-        )
-        load_config = LoadConfig(load_format="auto")
-        loader = get_model_loader(load_config)
-        loader.download_model(model_config)
+            model_config = ModelConfig(
+                model=model_name,
+                tokenizer=model_name,
+                tokenizer_mode="auto",
+                trust_remote_code=False,
+                dtype="auto",
+                seed=0,
+            )
+            load_config = LoadConfig(load_format="auto")
+            loader = get_model_loader(load_config)
+            loader.download_model(model_config)
+        else:
+            from huggingface_hub import snapshot_download
+
+            with console.status("Downloading model snapshot..."):
+                snapshot_download(repo_id=model_name, local_files_only=False)
 
         console.print(f"Model '{model_name}' downloaded successfully.")
 
-    except Exception as vllm_error:
-        console.print(f"vLLM loader failed: {vllm_error}")
-        console.print("Attempting fallback to snapshot_download...")
-
+    except Exception as download_error:
         try:
-            from huggingface_hub import snapshot_download
+            from rzr_aikit.model.remove import remove
 
-            snapshot_download(
-                repo_id=model_name,
-                local_files_only=False,
-            )
-
-            console.print(f"Model '{model_name}' downloaded successfully.")
-            return
-
-        except Exception as snapshot_error:
-            # Both methods failed - invalid model name or other issue
-            try:
-                from rzr_aikit.model.remove import remove
-
-                console.print(snapshot_error)
-                console.print("Removing any partial downloads from cache...")
-                remove(model_name)
-            except Exception:
-                pass
+            console.print(download_error)
+            console.print("Removing any partial downloads from cache...")
+            remove(model_name)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

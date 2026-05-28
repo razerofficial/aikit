@@ -43,7 +43,7 @@ services:
       - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
     volumes:
       # Cache HuggingFace models locally
-      - $HOME/.cache/huggingface:/home/Razer/.cache/huggingface
+      - $HOME/.cache/huggingface:/var/aikit/.cache/huggingface
     deploy:
       resources:
         reservations:

@@ -204,14 +204,16 @@ def start_server(engine):
         extra_args = ["--omni"] if getattr(engine, "omni", False) else None
         process = engine.serve(extra=extra_args)
         start_print = False
+        error_msg = None
         while True:
             piped_output = process.stdout.readline()
-            if "Error" in piped_output:
-                raise Exception(piped_output)
             if "Max retries exceeded" in piped_output:
                 raise Exception("Unable to establish connection to huggingface.co")
+            # capture the first error message shown
+            if "Error" in piped_output and error_msg is None:
+                error_msg = piped_output
             if not piped_output and process.poll() is not None:
-                break
+                raise Exception(error_msg)
             if "Starting vLLM API server" in piped_output:
                 start_print = True
             if start_print:

@@ -1,4 +1,4 @@
-from vllm.v1.executor.ray_distributed_executor import RayDistributedExecutor
+from vllm.v1.executor.ray_executor import RayDistributedExecutor
 from typing import Any, Callable, Optional, Union
 from concurrent.futures import Future
 

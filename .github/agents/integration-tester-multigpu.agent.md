@@ -107,7 +107,7 @@ docker run -it \
   --gpus all \
   --ipc host \
   --network host \
-  --mount type=bind,source=$HOME/.cache/huggingface,target=/home/Razer/.cache/huggingface \
+  --mount type=bind,source=$HOME/.cache/huggingface,target=/var/aikit/.cache/huggingface \
   --env HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN} \
   razer:aikit
 

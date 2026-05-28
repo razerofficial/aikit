@@ -81,25 +81,26 @@ def _run_gradio_blocking(server_url: str, port: int):
         input_radius="*radius_lg",
     )
 
-    css = (
-        " :has(> #prompt-textbox) { border: 0 !important; border-radius: 24px !important; }"
-        " #ref-audio .audio-container { min-height: 175px !important; height: 175px !important; }"
-        " #ref-audio .wrap { min-height: 0 !important; font-size: 0 !important; }"
-        " #ref-audio .button { padding: 0px 4px !important; }"
-        " #ref-audio .record-button { justify-content: center !important; }"
-        " #ref-audio .mic-select { padding: 0px 4px !important; }"
-        " #ref-audio .record-button::before { display: none !important; }"
-        " #ref-audio .stop-button::before { display: none !important; }"
-        " #ref-audio .stop-button-paused::before { display: none !important; }"
-        " #ref-audio .stop-button { justify-content: center !important; }"
-        " #ref-audio .stop-button-paused { justify-content: center !important; }"
-        " #ref-audio .pause-button { padding:var(--spacing-sm) !important; }"
-        " #ref-audio .resume-button { padding:var(--spacing-sm) !important; }"
-    )
-    gradio_app = create_gradio_app(server_url, theme=Razer, css=css)
+    gradio_app = create_gradio_app(server_url)
     gradio_app.launch(
         server_port=port,
         server_name="0.0.0.0",
+        theme=Razer,
+        css=(
+            " :has(> #prompt-textbox) { border: 0 !important; border-radius: 24px !important; }"
+            " #ref-audio .audio-container { min-height: 175px !important; height: 175px !important; }"
+            " #ref-audio .wrap { min-height: 0 !important; font-size: 0 !important; }"
+            " #ref-audio .button { padding: 0px 4px !important; }"
+            " #ref-audio .record-button { justify-content: center !important; }"
+            " #ref-audio .mic-select { padding: 0px 4px !important; }"
+            " #ref-audio .record-button::before { display: none !important; }"
+            " #ref-audio .stop-button::before { display: none !important; }"
+            " #ref-audio .stop-button-paused::before { display: none !important; }"
+            " #ref-audio .stop-button { justify-content: center !important; }"
+            " #ref-audio .stop-button-paused { justify-content: center !important; }"
+            " #ref-audio .pause-button { padding:var(--spacing-sm) !important; }"
+            " #ref-audio .resume-button { padding:var(--spacing-sm) !important; }"
+        ),
     )
 
 
@@ -150,7 +151,6 @@ def run(
         env["PYTHONUNBUFFERED"] = "1"
         process = subprocess.Popen(
             [sys.executable, "-c", code],
-            start_new_session=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -175,7 +175,7 @@ def run(
     t.start()
 
     with console.status("Starting UI server..."):
-        url_found.wait(timeout=10)
+        url_found.wait(timeout=20)
 
     if process.poll() is not None:
         console.print("[red]UI server failed to start.[/red]")
@@ -192,11 +192,24 @@ def generate_image(
     negative_prompt: str,
     server_url: str,
     num_outputs_per_prompt: int = 1,
+    input_image: Image.Image | None = None,
 ) -> Image.Image | None:
     """Generate an image using the chat completions API."""
     import gradio as gr
 
-    messages = [{"role": "user", "content": prompt}]
+    if input_image is not None:
+        buf = BytesIO()
+        input_image.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                {"type": "text", "text": prompt},
+            ],
+        }]
+    else:
+        messages = [{"role": "user", "content": prompt}]
 
     # Build extra_body with generation parameters
     extra_body = {
@@ -350,7 +363,7 @@ def generate_audio(
         raise gr.Error(f"Audio generation failed: {e}")
 
 
-def create_gradio_app(server_url: str, theme=None, css: str | None = None):
+def create_gradio_app(server_url: str):
     """
     Create the Gradio image generation interface.
 
@@ -388,8 +401,6 @@ def create_gradio_app(server_url: str, theme=None, css: str | None = None):
 
     with gr.Blocks(
         title="Razer Image Generation",
-        theme=theme,
-        css=css,
     ) as gradio_app:
         # Static header content
         gr.HTML("""
@@ -465,7 +476,7 @@ def create_gradio_app(server_url: str, theme=None, css: str | None = None):
                                         label="Inference Steps",
                                         minimum=5,
                                         maximum=100,
-                                        value=9,
+                                        value=10,
                                         step=5,
                                         show_label=False,
                                         container=False,
@@ -482,7 +493,7 @@ def create_gradio_app(server_url: str, theme=None, css: str | None = None):
                                         label="True CFG Scale",
                                         minimum=0.0,
                                         maximum=20.0,
-                                        value=0.0,
+                                        value=4.0,
                                         step=0.5,
                                         show_label=False,
                                         container=False,
@@ -502,6 +513,11 @@ def create_gradio_app(server_url: str, theme=None, css: str | None = None):
                                         show_label=False,
                                         container=False,
                                     )
+                            input_image = gr.Image(
+                                label="Input Image (for image editing)",
+                                type="pil",
+                                sources=["upload", "clipboard"],
+                            )
 
                         generate_btn = gr.Button("Generate Image", variant="primary")
 
@@ -624,7 +640,7 @@ def create_gradio_app(server_url: str, theme=None, css: str | None = None):
                         )
 
         generate_btn.click(
-            fn=lambda p, h, w, st, c, se, n: generate_image(
+            fn=lambda p, h, w, st, c, se, n, img: generate_image(
                 p,
                 h,
                 w,
@@ -634,8 +650,9 @@ def create_gradio_app(server_url: str, theme=None, css: str | None = None):
                 n,
                 server_url,
                 1,
+                img,
             ),
-            inputs=[prompt, height, width, steps, cfg_scale, seed, negative_prompt],
+            inputs=[prompt, height, width, steps, cfg_scale, seed, negative_prompt, input_image],
             outputs=[output_image],
         )
 

@@ -9,6 +9,32 @@ from huggingface_hub import snapshot_download, HfApi, ModelInfo, hf_hub_url
 from huggingface_hub.errors import LocalEntryNotFoundError
 
 
+def _normalize_mistral_params(raw: dict) -> dict:
+    """Shape a Mistral params.json into a HF-config-compatible dict."""
+    quant = raw.get("quantization")
+    return {
+        **raw,
+        "torch_dtype": raw.get("dtype", "bfloat16"),
+        "quantization_config": quant if isinstance(quant, dict) else {},
+    }
+
+
+def _extract_dtype(config: dict) -> str:
+    """Return a lowercase dtype string from a config dict.
+
+    Handles both old transformers (torch_dtype as str) and new transformers
+    (dtype as torch.dtype object), as well as raw JSON configs (always str).
+    Falls back to 'float32' when absent.
+    """
+    value = config.get("torch_dtype") or config.get("dtype")
+    if value is None:
+        return "float32"
+    if isinstance(value, str):
+        return value.lower()
+    # torch.dtype object e.g. torch.bfloat16 -> "bfloat16"
+    return str(value).rsplit(".", 1)[-1].lower()
+
+
 class ModelInfoFetcher:
     def __init__(
         self,
@@ -55,9 +81,16 @@ class ModelInfoFetcher:
 
     def _load_model_info(self):
         if self.source in ("local", "cache"):
-            config = AutoConfig.from_pretrained(self.model_path, trust_remote_code=True)
-            self.config = config.to_dict() if isinstance(config, PretrainedConfig) else config
-            self.dtype = (self.config.get("dtype") or self.config.get("torch_dtype") or "float32").lower()
+            try:
+                config = AutoConfig.from_pretrained(self.model_path, trust_remote_code=True)
+                self.config = config.to_dict() if isinstance(config, PretrainedConfig) else config
+            except (OSError, EnvironmentError, ValueError):
+                params_path = os.path.join(self.model_path, "params.json")
+                if not os.path.exists(params_path):
+                    raise
+                with open(params_path) as f:
+                    self.config = _normalize_mistral_params(json.load(f))
+            self.dtype = _extract_dtype(self.config)
             self.quant_config = self.config.get("quantization_config", {})
             self.weight_files = self._get_local_weight_files(self.model_path)
             grouped_weights = {
@@ -83,7 +116,7 @@ class ModelInfoFetcher:
                 self.total_bytes = next((grouped_weights[ext] for ext in priority if ext in grouped_weights), None)
                 # get dtype and quantization_config
                 self.config = self._get_remote_config_json()
-                self.dtype = (self.config.get("dtype") or self.config.get("torch_dtype") or "float32").lower()
+                self.dtype = _extract_dtype(self.config)
                 self.quant_config = self.config.get("quantization_config", {})
 
             except requests.exceptions.HTTPError as e:
@@ -113,22 +146,22 @@ class ModelInfoFetcher:
         return weight_files
 
     def _get_remote_config_json(self):
-        # Generate the correct URL for config.json
-        url = hf_hub_url(repo_id=self.model, filename="config.json", repo_type="model")
+        headers = {"Authorization": f"Bearer {self.access_token}"} if self.access_token else {}
 
-        headers = {}
-        if self.access_token:
-            headers["Authorization"] = f"Bearer {self.access_token}"
+        for filename in ("config.json", "params.json"):
+            url = hf_hub_url(repo_id=self.model, filename=filename, repo_type="model")
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 404:
+                continue
+            response.raise_for_status()
+            data = response.json()
+            if filename == "params.json":
+                data = _normalize_mistral_params(data)
+            return data
 
-        # Download directly to memory
-        response = requests.get(url, headers=headers, timeout=10)
-
-        # Handle possible errors
-        if response.status_code == 404:
-            raise FileNotFoundError(f"config.json not found in {self.model}@main")
-        response.raise_for_status()
-
-        return response.json()
+        raise FileNotFoundError(
+            f"Neither config.json nor params.json found in {self.model}@main"
+        )
 
     @staticmethod
     def _get_local_weight_files(local_dir: str):
