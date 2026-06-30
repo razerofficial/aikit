@@ -4,7 +4,6 @@ import json
 import requests
 
 from typing import Optional
-from transformers import AutoConfig, PretrainedConfig
 from huggingface_hub import snapshot_download, HfApi, ModelInfo, hf_hub_url
 from huggingface_hub.errors import LocalEntryNotFoundError
 
@@ -82,8 +81,15 @@ class ModelInfoFetcher:
     def _load_model_info(self):
         if self.source in ("local", "cache"):
             try:
-                config = AutoConfig.from_pretrained(self.model_path, trust_remote_code=True)
-                self.config = config.to_dict() if isinstance(config, PretrainedConfig) else config
+                config_path = os.path.join(self.model_path, "config.json")
+                if os.path.isfile(config_path):
+                    with open(config_path) as f:
+                        self.config = json.load(f)
+                else:
+                    # Fallback for models without a standard config.json
+                    from transformers import AutoConfig, PretrainedConfig
+                    config = AutoConfig.from_pretrained(self.model_path, trust_remote_code=True)
+                    self.config = config.to_dict() if isinstance(config, PretrainedConfig) else config
             except (OSError, EnvironmentError, ValueError):
                 params_path = os.path.join(self.model_path, "params.json")
                 if not os.path.exists(params_path):

@@ -33,7 +33,7 @@ The build uses a multi-stage Dockerfile with the following stages:
 
 Version pinning is managed in the Dockerfile:
 - `CUDA_BUILD_IMAGE` - CUDA development environment (example: nvidia/cuda:12.9.1-devel-ubuntu20.04)
-- `VLLM_IMAGE` - vLLM base image (example: vllm/vllm-openai:v0.14.1)
+- `VLLM_IMAGE` - vLLM base image (example: vllm/vllm-openai:v0.22.0)
 
 To customize versions or build specific stages, modify the build script in `docker_build_aikit/make.sh`.
 

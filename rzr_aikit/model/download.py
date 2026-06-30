@@ -24,7 +24,7 @@ def download(
 
     Examples:
 
-        $ rzr-aikit model download Qwen/Qwen3-0.6B
+        $ rzr-aikit model download Qwen/Qwen3.5-0.8B
         $ rzr-aikit model download facebook/opt-125m
     """
     # Check if model is already downloaded
@@ -60,26 +60,29 @@ def download_model(model_name: str):
 
     try:
         if category == ModelCategory.STANDARD or category == ModelCategory.BAGEL:
-            with console.status("Attempting download with vLLM loader..."):
-                from vllm.config import LoadConfig, ModelConfig
-                from vllm.model_executor.model_loader import get_model_loader
+            try:
+                with console.status("Attempting download with vLLM loader..."):
+                    from vllm.config import LoadConfig, ModelConfig
+                    from vllm.model_executor.model_loader import get_model_loader
+                model_config = ModelConfig(
+                    model=model_name,
+                    tokenizer=model_name,
+                    tokenizer_mode="auto",
+                    trust_remote_code=False,
+                    dtype="auto",
+                    seed=0,
+                )
+                load_config = LoadConfig(load_format="auto")
+                loader = get_model_loader(load_config)
+                loader.download_model(model_config)
+                return
+            except Exception:
+                pass
 
-            model_config = ModelConfig(
-                model=model_name,
-                tokenizer=model_name,
-                tokenizer_mode="auto",
-                trust_remote_code=False,
-                dtype="auto",
-                seed=0,
-            )
-            load_config = LoadConfig(load_format="auto")
-            loader = get_model_loader(load_config)
-            loader.download_model(model_config)
-        else:
-            from huggingface_hub import snapshot_download
+        from huggingface_hub import snapshot_download
 
-            with console.status("Downloading model snapshot..."):
-                snapshot_download(repo_id=model_name, local_files_only=False)
+        with console.status("Downloading model snapshot..."):
+            snapshot_download(repo_id=model_name, local_files_only=False)
 
         console.print(f"Model '{model_name}' downloaded successfully.")
 

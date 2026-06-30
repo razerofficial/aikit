@@ -363,6 +363,7 @@ class SmartVLLMServe:
         print(cmd)
 
         if detach:
-            return subprocess.Popen(cmd, env=final_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8')
+            log_file = open("/tmp/rzr_aikit.log", "w")
+            return subprocess.Popen(cmd, env=final_env, stdout=log_file, stderr=subprocess.STDOUT, encoding='utf-8')
 
         return subprocess.run(cmd, check=True, env=final_env)

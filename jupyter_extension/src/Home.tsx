@@ -210,6 +210,22 @@ export function Home(props: { open: (path: string) => void }) {
                 🎵 4. On-Device Audio Generation
               </a>
             </li>
+            <li>
+              <a 
+                style={linkStyle}
+                onClick={() => props.open('notebooks/5_On_Device_Video_Generation.ipynb')}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#44d62c';
+                  e.currentTarget.style.background = '#151515';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#222222';
+                  e.currentTarget.style.background = '#111111';
+                }}
+              >
+                🎬 5. On-Device Video Generation
+              </a>
+            </li>
           </ul>
         </div>
 

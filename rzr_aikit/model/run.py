@@ -101,7 +101,7 @@ def run(
     Examples:
 
         $ rzr-aikit model run deepseek-ai/DeepSeek-R1-Distill-Llama-8B
-        $ rzr-aikit model run Qwen/Qwen3-0.6B --max-model-len 4096
+        $ rzr-aikit model run Qwen/Qwen3.5-0.8B --max-model-len 4096
         $ rzr-aikit model run facebook/opt-125m --quantization bitsandbytes
     """
     flags: list[str] = ctx.args
@@ -205,27 +205,28 @@ def start_server(engine):
         process = engine.serve(extra=extra_args)
         start_print = False
         error_msg = None
-        while True:
-            piped_output = process.stdout.readline()
-            if "Max retries exceeded" in piped_output:
-                raise Exception("Unable to establish connection to huggingface.co")
-            # capture the first error message shown
-            if "Error" in piped_output and error_msg is None:
-                error_msg = piped_output
-            if not piped_output and process.poll() is not None:
-                raise Exception(error_msg)
-            if "Starting vLLM API server" in piped_output:
-                start_print = True
-            if start_print:
-                extracted = route_regex.search(piped_output)
-                if not extracted:
-                    extracted = start_regex.search(piped_output)
-                console.print(extracted.group(1))
-            if "Application startup complete" in piped_output:
-                console.print(
-                    "\nPlease use 'rzr-aikit model generate' to start generating responses."
-                )
-                return process
+        with open("/tmp/rzr_aikit.log", "r") as log_file:
+            while True:
+                piped_output = log_file.readline()
+                if "Max retries exceeded" in piped_output:
+                    raise Exception("Unable to establish connection to huggingface.co")
+                # capture the first error message shown
+                if "Error" in piped_output and error_msg is None:
+                    error_msg = piped_output
+                if not piped_output and process.poll() is not None:
+                    raise Exception(error_msg)
+                if "Starting vLLM API server" in piped_output:
+                    start_print = True
+                if start_print:
+                    extracted = route_regex.search(piped_output)
+                    if not extracted:
+                        extracted = start_regex.search(piped_output)
+                    console.print(extracted.group(1))
+                if "Application startup complete" in piped_output:
+                    console.print(
+                        "\nPlease use 'rzr-aikit model generate' to start generating responses."
+                    )
+                    return process
     except Exception as e:
         console.print(f"Error starting server: {e}")
         return None

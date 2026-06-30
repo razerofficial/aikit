@@ -31,11 +31,9 @@ def info(
 
     Examples:
 
-        $ rzr-aikit model info Qwen/Qwen3-0.6B
+        $ rzr-aikit model info Qwen/Qwen3.5-0.8B
         $ rzr-aikit model info facebook/opt-125m --full-config
     """
-    from rzr_aikit.utils.ModelInfoFetcher import ModelInfoFetcher
-    from rzr_aikit.utils.DiffusionModelInfoFetcher import DiffusionModelInfoFetcher
     from rzr_aikit.utils.model_classifier import ModelCategory, classify_model
     from rzr_aikit.utils.mlib import get_cuda_total_vram, check_model_fit
     from rzr_aikit.utils.connectivity import check_huggingface_connectivity
@@ -60,6 +58,7 @@ def info(
 
         if category == ModelCategory.DIFFUSION:
             # Standard diffusers pipeline — has model_index.json
+            from rzr_aikit.utils.DiffusionModelInfoFetcher import DiffusionModelInfoFetcher
             try:
                 fetcher = DiffusionModelInfoFetcher(
                     model_name, allow_internet=has_connection
@@ -79,6 +78,7 @@ def info(
 
         elif category in (ModelCategory.BAGEL, ModelCategory.STANDARD):
             # Bagel, standard LLMs, and Mistral-format models (params.json)
+            from rzr_aikit.utils.ModelInfoFetcher import ModelInfoFetcher
             try:
                 fetcher = ModelInfoFetcher(model_name, allow_internet=has_connection)
             except HuggingfaceAccessTokenRequired:

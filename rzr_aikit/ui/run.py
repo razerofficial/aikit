@@ -165,8 +165,9 @@ def run(
     def watch_output():
         for line in process.stdout:
             stripped = line.strip()
-            console.print(stripped)
             if "Running on" in stripped:
+                port = stripped.rsplit(":", 1)[1]
+                console.print(f"[green]Running on local URL:[/green][cyan] http://localhost:{port}[/cyan]")
                 time.sleep(1)
                 url_found.set()
         process.stdout.close()
@@ -251,6 +252,73 @@ def generate_image(
     except Exception as e:
         print(f"Error: {e}")
         raise gr.Error(f"Generation failed: {e}")
+
+
+def generate_video(
+    prompt: str,
+    height: int,
+    width: int,
+    fps: int,
+    num_frames: int,
+    negative_prompt: str,
+    server_url: str,
+) -> str | None:
+    """Generate a video via POST /v1/videos → poll → download. Returns a temp file path."""
+    import tempfile
+    import gradio as gr
+
+    if not prompt.strip():
+        raise gr.Error("Please enter a prompt.")
+
+    form_data = {
+        "prompt": prompt.strip(),
+        "width": str(width),
+        "height": str(height),
+        "fps": str(fps),
+        "num_frames": str(num_frames),
+    }
+    if negative_prompt and negative_prompt.strip():
+        form_data["negative_prompt"] = negative_prompt.strip()
+
+    try:
+        resp = requests.post(
+            f"{server_url}/v1/videos",
+            data=form_data,
+            timeout=60,
+        )
+        resp.raise_for_status()
+        video_id = resp.json().get("id")
+        if not video_id:
+            raise gr.Error("Server did not return a video ID.")
+    except gr.Error:
+        raise
+    except Exception as e:
+        raise gr.Error(f"Failed to submit video job: {e}")
+
+    for _ in range(300):
+        time.sleep(2)
+        try:
+            status_resp = requests.get(f"{server_url}/v1/videos/{video_id}", timeout=10)
+            status_resp.raise_for_status()
+            status = status_resp.json().get("status")
+        except Exception as e:
+            raise gr.Error(f"Polling error: {e}")
+        if status == "completed":
+            break
+        if status == "failed":
+            raise gr.Error("Video generation failed on the server.")
+
+    try:
+        dl_resp = requests.get(
+            f"{server_url}/v1/videos/{video_id}/content",
+            timeout=120,
+        )
+        dl_resp.raise_for_status()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            tmp.write(dl_resp.content)
+            return tmp.name
+    except Exception as e:
+        raise gr.Error(f"Failed to download video: {e}")
 
 
 def encode_audio_to_base64(audio_data: tuple) -> str:
@@ -399,8 +467,25 @@ def create_gradio_app(server_url: str):
 
     voices = get_available_voices()
 
+    IMAGE_EXAMPLES = [
+        "Fluffy cat sitting on glowing Razer keyboard wearing Kraken kitty headphones",
+        "Cute sea otter wearing a Faker esports jersey holding a basketball",
+        "Cyberpunk style futuristic city with neon lights and Razer HQ building",
+        "Chinese ink painting of a stylized Razer three-headed snake logo",
+    ]
+    VIDEO_EXAMPLES = [
+        "Razer snake logo animating through a glowing cyberpunk city",
+        "Sea otter sliding on ice in slow motion, cinematic",
+        "Dog running after a ball on a beach during sunset",
+    ]
+    AUDIO_EXAMPLES = [
+        "Welcome to Razer AIKit, your local AI development toolkit.",
+        "Generate custom audio quickly with state of the art models.",
+        "How is everyone doing today.",
+    ]
+
     with gr.Blocks(
-        title="Razer Image Generation",
+        title="Razer AIKit",
     ) as gradio_app:
         # Static header content
         gr.HTML("""
@@ -528,56 +613,95 @@ def create_gradio_app(server_url: str):
                             height=512,
                         )
 
-                # Examples
-                gr.Examples(
-                    examples=[
-                        [
-                            "Fluffy cat sitting on glowing Razer keyboard wearing Kraken kitty headphones",
-                            "",
-                            512,
-                            512,
-                            9,
-                            0.0,
-                            -1,
-                        ],
-                        [
-                            "Cute sea otter wearing a Faker esports jersey holding a basketball",
-                            "",
-                            512,
-                            512,
-                            9,
-                            0.0,
-                            -1,
-                        ],
-                        [
-                            "Cyberpunk style futuristic city with neon lights and Razer HQ building",
-                            "blurry, low quality",
-                            512,
-                            512,
-                            9,
-                            0.0,
-                            -1,
-                        ],
-                        [
-                            "Chinese ink painting of a stylized Razer three-headed snake logo",
-                            "",
-                            512,
-                            512,
-                            9,
-                            0.0,
-                            -1,
-                        ],
-                    ],
-                    inputs=[
-                        prompt,
-                        negative_prompt,
-                        height,
-                        width,
-                        steps,
-                        cfg_scale,
-                        seed,
-                    ],
-                )
+            with gr.Tab("Video Generation") as video_tab:
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        video_prompt = gr.Textbox(
+                            show_label=False,
+                            placeholder="Describe the video you want to generate...",
+                            lines=7,
+                            elem_id="prompt-textbox",
+                        )
+
+                        with gr.Accordion("Additional Settings", open=False):
+                            video_negative_prompt = gr.Textbox(
+                                label="Negative Prompt",
+                                placeholder="Describe what you don't want...",
+                                lines=1,
+                            )
+                            with gr.Group():
+                                with gr.Row():
+                                    gr.Textbox(
+                                        value="Height",
+                                        show_label=False,
+                                        interactive=False,
+                                        container=False,
+                                    )
+                                    video_height = gr.Number(
+                                        label="Height",
+                                        minimum=256,
+                                        maximum=2048,
+                                        value=480,
+                                        step=64,
+                                        show_label=False,
+                                        container=False,
+                                    )
+                            with gr.Group():
+                                with gr.Row():
+                                    gr.Textbox(
+                                        value="Width",
+                                        show_label=False,
+                                        interactive=False,
+                                        container=False,
+                                    )
+                                    video_width = gr.Number(
+                                        label="Width",
+                                        minimum=256,
+                                        maximum=2048,
+                                        value=720,
+                                        step=64,
+                                        show_label=False,
+                                        container=False,
+                                    )
+                            with gr.Group():
+                                with gr.Row():
+                                    gr.Textbox(
+                                        value="FPS",
+                                        show_label=False,
+                                        interactive=False,
+                                        container=False,
+                                    )
+                                    video_fps = gr.Number(
+                                        label="FPS",
+                                        minimum=1,
+                                        maximum=60,
+                                        value=12,
+                                        step=1,
+                                        show_label=False,
+                                        container=False,
+                                    )
+                            with gr.Group():
+                                with gr.Row():
+                                    gr.Textbox(
+                                        value="Num Frames",
+                                        show_label=False,
+                                        interactive=False,
+                                        container=False,
+                                    )
+                                    video_num_frames = gr.Number(
+                                        label="Num Frames",
+                                        minimum=1,
+                                        maximum=500,
+                                        value=36,
+                                        step=1,
+                                        show_label=False,
+                                        container=False,
+                                    )
+
+                        video_generate_btn = gr.Button("Generate Video", variant="primary")
+
+                    with gr.Column(scale=1):
+                        video_output = gr.Video(label="Generated Video", autoplay=True)
 
             with gr.Tab("Audio Generation") as audio_tab:
                 with gr.Row():
@@ -639,6 +763,45 @@ def create_gradio_app(server_url: str):
                             autoplay=True,
                         )
 
+        active_tab = gr.State("image")
+        current_examples = gr.State(IMAGE_EXAMPLES)
+        examples_table = gr.Dataframe(
+            value=[[e] for e in IMAGE_EXAMPLES],
+            headers=["Examples"],
+            col_count=(1, "fixed"),
+            interactive=False,
+            wrap=False,
+        )
+
+        def route_example(evt: gr.SelectData, examples, tab):
+            text = examples[evt.index[0]]
+            empty = gr.update()
+            if tab == "image":
+                return gr.update(value=text), empty, empty
+            elif tab == "video":
+                return empty, gr.update(value=text), empty
+            else:
+                return empty, empty, gr.update(value=text)
+
+        examples_table.select(
+            fn=route_example,
+            inputs=[current_examples, active_tab],
+            outputs=[prompt, video_prompt, audio_text],
+        )
+
+        image_tab.select(
+            fn=lambda: ("image", [[e] for e in IMAGE_EXAMPLES], IMAGE_EXAMPLES, '<h1 style="margin-top: 5px; font-weight: 500;">Generate custom images with local models</h1>'),
+            outputs=[active_tab, examples_table, current_examples, tab_heading],
+        )
+        video_tab.select(
+            fn=lambda: ("video", [[e] for e in VIDEO_EXAMPLES], VIDEO_EXAMPLES, '<h1 style="margin-top: 5px; font-weight: 500;">Generate custom videos with local models</h1>'),
+            outputs=[active_tab, examples_table, current_examples, tab_heading],
+        )
+        audio_tab.select(
+            fn=lambda: ("audio", [[e] for e in AUDIO_EXAMPLES], AUDIO_EXAMPLES, '<h1 style="margin-top: 5px; font-weight: 500;">Generate custom audio with local models</h1>'),
+            outputs=[active_tab, examples_table, current_examples, tab_heading],
+        )
+
         generate_btn.click(
             fn=lambda p, h, w, st, c, se, n, img: generate_image(
                 p,
@@ -673,8 +836,12 @@ def create_gradio_app(server_url: str):
             outputs=[audio_output],
         )
 
-        audio_tab.select(fn=lambda: '<h1 style="margin-top: 5px; font-weight: 500;">Generate custom audio with local models</h1>', outputs=tab_heading)
-        image_tab.select(fn=lambda: '<h1 style="margin-top: 5px; font-weight: 500;">Generate custom images with local models</h1>', outputs=tab_heading)
+        video_generate_btn.click(
+            fn=lambda p, h, w, fps, nf, n: generate_video(p, h, w, fps, nf, n, server_url),
+            inputs=[video_prompt, video_height, video_width, video_fps, video_num_frames, video_negative_prompt],
+            outputs=[video_output],
+        )
+
 
     return gradio_app
 

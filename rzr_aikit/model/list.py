@@ -29,8 +29,6 @@ def list():
 
     try:
         from rzr_aikit.utils.mlib import get_cuda_total_vram, check_model_fit
-        from rzr_aikit.utils.ModelInfoFetcher import ModelInfoFetcher
-        from rzr_aikit.utils.DiffusionModelInfoFetcher import DiffusionModelInfoFetcher
         from rzr_aikit.utils.model_classifier import ModelCategory, classify_model
         from huggingface_hub import scan_cache_dir
 
@@ -72,6 +70,7 @@ def list():
 
                 if category == ModelCategory.DIFFUSION:
                     # Standard diffusers pipeline — has model_index.json
+                    from rzr_aikit.utils.DiffusionModelInfoFetcher import DiffusionModelInfoFetcher
                     fetcher = DiffusionModelInfoFetcher(
                         repo.repo_id, allow_internet=False
                     )
@@ -79,6 +78,7 @@ def list():
 
                 elif category in (ModelCategory.BAGEL, ModelCategory.STANDARD):
                     # Bagel, standard LLMs, and Mistral-format models (params.json)
+                    from rzr_aikit.utils.ModelInfoFetcher import ModelInfoFetcher
                     fetcher = ModelInfoFetcher(repo.repo_id, allow_internet=False)
                     weight_size = fetcher.total_bytes
                     data_type = fetcher.dtype
@@ -129,7 +129,6 @@ def list():
             )
     except Exception as e:
         console.print_exception()
-
 
 def has_weights(repo):
     """

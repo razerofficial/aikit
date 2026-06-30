@@ -252,7 +252,7 @@ class TestModelInfoFetcherMistralLocal:
         (model_dir / "consolidated.safetensors").write_bytes(b"\x00" * 100)
 
         mocker.patch(
-            "rzr_aikit.utils.ModelInfoFetcher.AutoConfig.from_pretrained",
+            "transformers.AutoConfig.from_pretrained",
             side_effect=OSError("no config.json"),
         )
 
@@ -271,7 +271,7 @@ class TestModelInfoFetcherMistralLocal:
         model_dir.mkdir()
 
         mocker.patch(
-            "rzr_aikit.utils.ModelInfoFetcher.AutoConfig.from_pretrained",
+            "transformers.AutoConfig.from_pretrained",
             side_effect=OSError("no config.json"),
         )
 
@@ -288,9 +288,9 @@ class TestModelInfoFetcherMistralLocal:
 
         # Patch PretrainedConfig to a sentinel class so isinstance returns False,
         # then return a plain dict from AutoConfig — the else branch assigns it directly.
-        mocker.patch("rzr_aikit.utils.ModelInfoFetcher.PretrainedConfig", type(None))
+        mocker.patch("transformers.PretrainedConfig", type(None))
         mocker.patch(
-            "rzr_aikit.utils.ModelInfoFetcher.AutoConfig.from_pretrained",
+            "transformers.AutoConfig.from_pretrained",
             return_value={"torch_dtype": FakeDtype(), "model_type": "llama"},
         )
 
@@ -306,9 +306,9 @@ class TestModelInfoFetcherMistralLocal:
         """Standard HF config.json with string torch_dtype loads correctly."""
         from rzr_aikit.utils.ModelInfoFetcher import ModelInfoFetcher
 
-        mocker.patch("rzr_aikit.utils.ModelInfoFetcher.PretrainedConfig", type(None))
+        mocker.patch("transformers.PretrainedConfig", type(None))
         mocker.patch(
-            "rzr_aikit.utils.ModelInfoFetcher.AutoConfig.from_pretrained",
+            "transformers.AutoConfig.from_pretrained",
             return_value={
                 "torch_dtype": "float16",
                 "quantization_config": {"quant_method": "awq"},

@@ -171,13 +171,13 @@ This workflow demonstrates running a small model locally on a single device.
 #### 1. Check Model Information
 
 ```bash
-rzr-aikit model info Qwen/Qwen3-0.6B
+rzr-aikit model info Qwen/Qwen3.5-0.8B
 ```
 
 #### 2. Download the Model
 
 ```bash
-rzr-aikit model download Qwen/Qwen3-0.6B
+rzr-aikit model download Qwen/Qwen3.5-0.8B
 ```
 
 #### 3. Discover Available GPUs
@@ -189,20 +189,20 @@ gpu-discover
 #### 4. Get Optimal Configuration (Optional)
 
 ```bash
-gpu-select Qwen/Qwen3-0.6B
+gpu-select Qwen/Qwen3.5-0.8B
 ```
 
 #### 5. Run the Model
 
 ```bash
-rzr-aikit model run Qwen/Qwen3-0.6B
+rzr-aikit model run Qwen/Qwen3.5-0.8B
 ```
 
 Start the inference server with automatic optimization. Or use the recommended command from `gpu-select`:
 
 ```bash
 # Example with manual configuration
-rzr-aikit model run Qwen/Qwen3-0.6B --tensor-parallel-size 1 --gpu-memory-utilization 0.9
+rzr-aikit model run Qwen/Qwen3.5-0.8B --tensor-parallel-size 1 --gpu-memory-utilization 0.9
 ```
 
 #### 6. Generate Text
@@ -215,7 +215,7 @@ rzr-aikit model generate "Explain quantum computing to a 12-year-old."
 
 ```bash
 python -m vllm.entrypoints.cli.main bench serve \
-  --model Qwen/Qwen3-0.6B \
+  --model Qwen/Qwen3.5-0.8B \
   --dataset-name sharegpt \
   --dataset-path benchmarks/ShareGPT_300_conversations.json \
   --request-rate 10.0 \

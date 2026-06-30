@@ -8,7 +8,7 @@ from typing import Optional
 from huggingface_hub import snapshot_download, HfApi, ModelInfo, hf_hub_url
 from huggingface_hub.errors import LocalEntryNotFoundError
 
-from vllm_omni.diffusion.registry import _DIFFUSION_MODELS
+from rzr_aikit.utils._diffusion_model_names import _DIFFUSION_MODEL_NAMES
 
 
 class DiffusionModelInfoFetcher:
@@ -67,7 +67,7 @@ class DiffusionModelInfoFetcher:
         if self.source in ("local", "cache"):
             self.index = self._get_local_index()
             self._model_architecture = self.index.get("_class_name")
-            if self._model_architecture not in _DIFFUSION_MODELS:
+            if self._model_architecture not in _DIFFUSION_MODEL_NAMES:
                 raise ValueError(f"Unsupported architecture: {self._model_architecture}")
             
             self.weight_files = self._get_local_weight_files(self.model_path, self.index)
@@ -91,7 +91,7 @@ class DiffusionModelInfoFetcher:
                 
                 self.index = self._get_remote_index_json()
                 self._model_architecture = self.index.get("_class_name")
-                if self._model_architecture not in _DIFFUSION_MODELS:
+                if self._model_architecture not in _DIFFUSION_MODEL_NAMES:
                     raise ValueError(f"Unsupported architecture: {self._model_architecture}")
                 
                 self.weight_files = self._get_remote_weight_files(self.index)

@@ -101,7 +101,7 @@ Jupyter environments).
 Examples:
 
     $ rzr-aikit model run deepseek-ai/DeepSeek-R1-Distill-Llama-8B
-    $ rzr-aikit model run Qwen/Qwen3-0.6B --max-model-len 4096
+    $ rzr-aikit model run Qwen/Qwen3.5-0.8B --max-model-len 4096
     $ rzr-aikit model run facebook/opt-125m --quantization bitsandbytes
 
 **Usage**:
@@ -129,7 +129,7 @@ skip the download and notify you.
 
 Examples:
 
-    $ rzr-aikit model download Qwen/Qwen3-0.6B
+    $ rzr-aikit model download Qwen/Qwen3.5-0.8B
     $ rzr-aikit model download facebook/opt-125m
 
 **Usage**:
@@ -157,7 +157,7 @@ with local and distributed inference. Optionally displays the full model configu
 
 Examples:
 
-    $ rzr-aikit model info Qwen/Qwen3-0.6B
+    $ rzr-aikit model info Qwen/Qwen3.5-0.8B
     $ rzr-aikit model info deepseek-ai/DeepSeek-R1-Distill-Llama-8B --trust-remote
     $ rzr-aikit model info facebook/opt-125m --full-config
 

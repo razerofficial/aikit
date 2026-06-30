@@ -10,8 +10,8 @@
 # Build arguments for version pinning
 ARG CUDA_VERSION_MAJOR=13
 ARG CUDA_VERSION_MINOR=0
-ARG VLLM_VERSION=v0.20.0
-ARG VLLM_IMAGE=vllm/vllm-openai:$VLLM_VERSION-cu${CUDA_VERSION_MAJOR}${CUDA_VERSION_MINOR}
+ARG VLLM_VERSION=v0.22.0
+ARG VLLM_IMAGE=vllm/vllm-openai:$VLLM_VERSION
 
 FROM ${VLLM_IMAGE} AS base
 ARG CUDA_VERSION_MAJOR CUDA_VERSION_MINOR
@@ -70,13 +70,15 @@ FROM base AS vllm_extended
 ARG VLLM_VERSION
 
 # Install Ray for distributed computing and cluster management
-RUN uv pip install --system "ray[all]"
+RUN uv pip install --system "ray[default]"
 
 # Install vLLM audio extension for multimodal capabilities at system level
-RUN uv pip install --system "vllm[audio]==${VLLM_VERSION}" && \
-    uv pip install --system vllm-omni==${VLLM_VERSION}
-# Install chafa for terminal-based image rendering
-RUN apt-get update && apt-get install -y chafa && rm -rf /var/lib/apt/lists/*
+RUN uv pip install --system "safetensors>=0.8.0rc1" && \
+    uv pip install --system "vllm[audio]==${VLLM_VERSION}" && \ 
+    uv pip install --system vllm-omni==${VLLM_VERSION} && \
+    uv pip install --system "pydub>=0.25.1"
+# Install chafa for terminal-based image rendering and jq for JSON processing in shell scripts
+RUN apt-get update && apt-get install -y chafa jq && rm -rf /var/lib/apt/lists/*
 
 # Copy operational scripts and benchmarking tools
 COPY docker_build_aikit/scripts/* /usr/local/bin/
@@ -211,8 +213,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install LlamaFactory without resolving its dependencies to prevent version downgrades
-RUN uv pip install --system "git+https://github.com/hiyouga/LLaMA-Factory.git" && \
-    uv pip install --system "gradio>=6.13.0,<7"
+RUN uv pip install --system "llamafactory" && \
+    uv pip install --system "gradio>=6.18.0"
 ARG USERNAME=Razer
 # Create non-root user with sudo privileges for security
 # Make the home directory a shared 1777 folder so that --user works
