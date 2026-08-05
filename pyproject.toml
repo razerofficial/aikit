@@ -1,6 +1,6 @@
 [project]
 name = "rzr-aikit"
-version = "0.5.0"
+version = "0.6.0"
 description = "A package for Razer GPU compute and AI services"
 authors = [{ name = "Razer Inc." }]
 license = { text = "Apache-2.0" }

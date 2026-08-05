@@ -235,7 +235,7 @@ export function Home(props: { open: (path: string) => void }) {
             <li>
               <a 
                 style={linkStyle}
-                onClick={() => props.open('notebooks/5_On_Device_Fine_Tuning_LoRA.ipynb')}
+                onClick={() => props.open('notebooks/6_On_Device_Fine_Tuning_LoRA.ipynb')}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = '#44d62c';
                   e.currentTarget.style.background = '#151515';
@@ -245,13 +245,13 @@ export function Home(props: { open: (path: string) => void }) {
                   e.currentTarget.style.background = '#111111';
                 }}
               >
-                💻 5. On-Device Fine-Tuning (LoRA)
+                💻 6. On-Device Fine-Tuning (LoRA)
               </a>
             </li>
             <li>
               <a 
                 style={linkStyle}
-                onClick={() => props.open('notebooks/6a_(Head)_Distributed_Fine_Tuning_LoRA.ipynb')}
+                onClick={() => props.open('notebooks/7a_(Head)_Distributed_Fine_Tuning_LoRA.ipynb')}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = '#44d62c';
                   e.currentTarget.style.background = '#151515';
@@ -261,13 +261,13 @@ export function Home(props: { open: (path: string) => void }) {
                   e.currentTarget.style.background = '#111111';
                 }}
               >
-                🌐 6a. Distributed Fine-Tuning LoRA (Head)
+                🌐 7a. Distributed Fine-Tuning LoRA (Head)
               </a>
             </li>
             <li>
               <a 
                 style={linkStyle}
-                onClick={() => props.open('notebooks/6b_(Node)_Distributed_Fine_Tuning_LoRA.ipynb')}
+                onClick={() => props.open('notebooks/7b_(Node)_Distributed_Fine_Tuning_LoRA.ipynb')}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = '#44d62c';
                   e.currentTarget.style.background = '#151515';
@@ -277,7 +277,7 @@ export function Home(props: { open: (path: string) => void }) {
                   e.currentTarget.style.background = '#111111';
                 }}
               >
-                🌐 6b. Distributed Fine-Tuning LoRA (Node)
+                🌐 7b. Distributed Fine-Tuning LoRA (Node)
               </a>
             </li>
           </ul>
@@ -290,7 +290,7 @@ export function Home(props: { open: (path: string) => void }) {
           <li>
             <a 
               style={linkStyle}
-              onClick={() => props.open('notebooks/7_Integrating_Razer_AIKit_with_OpenAI_API.ipynb')}
+              onClick={() => props.open('notebooks/8_Integrating_Razer_AIKit_with_OpenAI_API.ipynb')}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = '#44d62c';
                 e.currentTarget.style.background = '#151515';
@@ -300,13 +300,13 @@ export function Home(props: { open: (path: string) => void }) {
                 e.currentTarget.style.background = '#111111';
               }}
             >
-              7. Integrating AIKit with OpenAI API
+              8. Integrating AIKit with OpenAI API
             </a>
           </li>
           <li>
             <a 
               style={linkStyle}
-              onClick={() => props.open('notebooks/8_Semantic_Search.ipynb')}
+              onClick={() => props.open('notebooks/9_Semantic_Search.ipynb')}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = '#44d62c';
                 e.currentTarget.style.background = '#151515';
@@ -316,7 +316,23 @@ export function Home(props: { open: (path: string) => void }) {
                 e.currentTarget.style.background = '#111111';
               }}
             >
-              8. Semantic Search
+              9. Semantic Search
+            </a>
+          </li>
+          <li>
+            <a 
+              style={linkStyle}
+              onClick={() => props.open('notebooks/10_Voice_Agent.ipynb')}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#44d62c';
+                e.currentTarget.style.background = '#151515';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = '#222222';
+                e.currentTarget.style.background = '#111111';
+              }}
+            >
+              10. Voice Agent
             </a>
           </li>
         </ul>

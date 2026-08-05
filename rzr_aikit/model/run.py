@@ -88,6 +88,14 @@ def run(
             is_flag=True,
         ),
     ] = False,
+    port: Annotated[
+        int,
+        typer.Option(
+            "--port",
+            "-p",
+            help="Port to run the server on.",
+        ),
+    ] = 8000,
 ):
     """
     Run a model for inferencing.
@@ -113,12 +121,12 @@ def run(
     if "JPY_PARENT_PID" in os.environ:
         engine = run_model(ctx, model, omni)
         if engine:
-            start_server(engine)
+            start_server(engine, port)
     else:
         with Live(gpu, console=console, refresh_per_second=8, transient=True):
             engine = run_model(ctx, model, omni)
             if engine:
-                start_server(engine)
+                start_server(engine, port)
 
 
 @spinner("Optimizing parameters...", console=console)
@@ -191,7 +199,7 @@ def run_model(ctx: typer.Context, model: str, omni: bool):
 
 
 @spinner("Starting up model server...", console=console)
-def start_server(engine):
+def start_server(engine, port=None):
     """
     Start the VLLM server with the given engine.
     """
@@ -202,7 +210,7 @@ def start_server(engine):
         start_regex = re.compile(r"INFO:\s*(.*)")
 
         extra_args = ["--omni"] if getattr(engine, "omni", False) else None
-        process = engine.serve(extra=extra_args)
+        process = engine.serve(port=port, extra=extra_args)
         start_print = False
         error_msg = None
         with open("/tmp/rzr_aikit.log", "r") as log_file:

@@ -126,6 +126,9 @@ def check_model_fit(memory: float, weight_size: int, dtype: str | None) -> str:
 
 from openai import OpenAI, APIConnectionError, APITimeoutError
 client = OpenAI(base_url="http://localhost:8000/v1", api_key="aaa", max_retries=0, timeout=5.0)
+def configure(base_url: str):
+      global client
+      client = OpenAI(base_url=f"{base_url}/v1", api_key="aaa", max_retries=0, timeout=5.0)
 
 def get_running_models():
     try:

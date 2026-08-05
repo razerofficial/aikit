@@ -1,0 +1,11 @@
+# Runtime dependencies for the voice_agent realtime server.
+websockets>=12.0
+openai>1.97.1
+numpy>=2.1.2,<3
+
+# Optional: microphone/speaker loopback example (examples/openai_client.py)
+# pyaudio>=0.2.14
+
+# Optional: test suite
+# pytest>=8.3.4,<9
+# pytest-asyncio>=0.24.0

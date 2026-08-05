@@ -85,6 +85,9 @@ class ModelInfoFetcher:
                 if os.path.isfile(config_path):
                     with open(config_path) as f:
                         self.config = json.load(f)
+                        text_config = self.config.get("text_config")
+                        if text_config:
+                            self.config = text_config
                 else:
                     # Fallback for models without a standard config.json
                     from transformers import AutoConfig, PretrainedConfig
@@ -122,6 +125,9 @@ class ModelInfoFetcher:
                 self.total_bytes = next((grouped_weights[ext] for ext in priority if ext in grouped_weights), None)
                 # get dtype and quantization_config
                 self.config = self._get_remote_config_json()
+                text_config = self.config.get("text_config")
+                if text_config:
+                    self.config = text_config
                 self.dtype = _extract_dtype(self.config)
                 self.quant_config = self.config.get("quantization_config", {})
 

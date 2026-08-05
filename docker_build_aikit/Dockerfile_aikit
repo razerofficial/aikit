@@ -10,7 +10,7 @@
 # Build arguments for version pinning
 ARG CUDA_VERSION_MAJOR=13
 ARG CUDA_VERSION_MINOR=0
-ARG VLLM_VERSION=v0.22.0
+ARG VLLM_VERSION=v0.24.0
 ARG VLLM_IMAGE=vllm/vllm-openai:$VLLM_VERSION
 
 FROM ${VLLM_IMAGE} AS base
@@ -166,6 +166,9 @@ RUN mkdir -m 1777 -p /var/aikit/notebooks && chmod 1777 /var/aikit/
 # Copy example Jupyter notebooks
 COPY --chmod=ugo=rwX notebooks /var/aikit/notebooks
 
+# Copy voice agent directory
+COPY --chmod=ugo=rwX voice_agent /var/aikit/voice_agent
+
 # Install GPU automation CLI utilities
 COPY rzr_aikit/utils/gpu_*.py /usr/local/bin/
 
@@ -209,7 +212,8 @@ RUN apt-get update && \
         git \
         iproute2 \
         net-tools \
-        wget && \
+        wget \
+        nano && \
     rm -rf /var/lib/apt/lists/*
 
 # Install LlamaFactory without resolving its dependencies to prevent version downgrades

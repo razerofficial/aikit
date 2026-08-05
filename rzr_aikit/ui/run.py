@@ -22,6 +22,9 @@ console = Console()
 def _run_gradio_blocking(server_url: str, port: int):
     """Run Gradio server in blocking mode. Called inside the background subprocess."""
     import gradio as gr
+    from rzr_aikit.utils.mlib import configure
+
+    configure(server_url)
 
     Razer = gr.themes.Base(
         primary_hue=gr.themes.Color(
@@ -100,6 +103,25 @@ def _run_gradio_blocking(server_url: str, port: int):
             " #ref-audio .stop-button-paused { justify-content: center !important; }"
             " #ref-audio .pause-button { padding:var(--spacing-sm) !important; }"
             " #ref-audio .resume-button { padding:var(--spacing-sm) !important; }"
+            " #voice-center-col { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; padding: 40px 0 20px !important; gap: 16px !important; }"
+            " #voice-mic .audio-container { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; min-height: 0 !important; height: auto !important; }"
+            " #voice-mic .wrap { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; min-height: 0 !important; display: flex !important; flex-direction: column !important; align-items: center !important; }"
+            " #voice-mic .controls { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; display: flex !important; justify-content: center !important; }"
+            " #voice-mic .mic-select { display: none !important; }"
+            " #voice-mic .waveform-container { display: none !important; }"
+            " #voice-mic .timeline { display: none !important; }"
+            " #voice-mic .pause-button, #voice-mic .resume-button { display: none !important; }"
+            " #voice-mic .record-button, #voice-mic .stop-button, #voice-mic .stop-button-paused {"
+            "   width: 120px !important; height: 120px !important; border-radius: 50% !important;"
+            "   font-size: 18px !important; font-weight: 500 !important;"
+            "   background: var(--button-primary-background-fill) !important;"
+            "   color: black !important; border: none !important;"
+            "   display: flex !important; align-items: center !important; justify-content: center !important;"
+            "   cursor: pointer !important; padding: 0 !important;"
+            "   box-shadow: 0 4px 24px rgba(68,214,44,0.25) !important; min-width: 0 !important;"
+            " }"
+            " #voice-mic .record-button::before, #voice-mic .stop-button::before, #voice-mic .stop-button-paused::before { display: none !important; }"
+            " #voice-status { text-align: center !important; }"
         ),
     )
 
@@ -431,6 +453,124 @@ def generate_audio(
         raise gr.Error(f"Audio generation failed: {e}")
 
 
+VOICE_SERVER_URL = "http://127.0.0.1:8081"
+
+VOICE_STATUS_LABELS = {
+    "idle": ("#888888", "Not connected"),
+    "connecting": ("#cccccc", "Connecting…"),
+    "listening": ("#44d62c", "Listening"),
+    "thinking": ("#cccccc", "Thinking…"),
+    "speaking": ("#44d62c", "Speaking"),
+    "error": ("#ff4444", "Error"),
+}
+
+
+def voice_status_html(bridge) -> str:
+    """Render the bridge's current state as a small colored status line."""
+    if bridge is None:
+        color, label = VOICE_STATUS_LABELS["idle"]
+    else:
+        color, label = VOICE_STATUS_LABELS.get(
+            bridge.status, ("#888888", bridge.status)
+        )
+        if bridge.error:
+            color, label = VOICE_STATUS_LABELS["error"][0], f"Error: {bridge.error}"
+    return (
+        f'<p style="margin:4px 0; font-size:0.95em;">'
+        f'<span style="color:{color};">&#9679;</span> {label}</p>'
+    )
+
+
+def voice_start(bridge):
+    """
+    Connect to the realtime server on record start.
+
+    Model and prompt come from the server's own config file, so the tab needs no
+    settings of its own — same as openai_client.py, which only knows a URL.
+    """
+    from rzr_aikit.ui.voice_bridge import VoiceBridge
+
+    if bridge is not None:
+        bridge.close()
+
+    bridge = VoiceBridge(server_url=VOICE_SERVER_URL)
+    bridge.start()
+    return bridge, voice_status_html(bridge), []
+
+
+def voice_stop(bridge):
+    """Disconnect on record stop."""
+    if bridge is not None:
+        bridge.close()
+    return None, voice_status_html(None)
+
+
+def voice_on_mic(chunk, bridge):
+    """
+    Mic stream handler. Must stay fast — it runs on every stream tick, so it
+    only resamples and enqueues, never waits on the server.
+    """
+    from rzr_aikit.ui.voice_bridge import to_pcm16_24k
+
+    if bridge is None or chunk is None or bridge.stop.is_set():
+        return
+    sample_rate, audio = chunk
+    if audio is None or len(audio) == 0:
+        return
+    bridge.mic_q.put(to_pcm16_24k(audio, sample_rate))
+
+
+def voice_play(bridge):
+    """
+    Long-lived generator draining play_q into gr.Audio(streaming=True).
+
+    One generator for the whole session, not one per reply. Gradio keys the HLS
+    playlist to the generator run, so returning between replies forces the
+    browser to attach to a brand-new playlist every turn — which costs a stall
+    of about a second before each response becomes audible. Staying open reuses
+    the one playlist and keeps that cost to the first reply only.
+
+    Segments are published as soon as they are ready, never held back to match
+    playback speed: the playlist advertises EXT-X-TARGETDURATION of at least 5
+    (MediaStream.max_duration starts at 5) and a player may wait that long
+    between playlist reloads, so withholding audio starves it for seconds.
+
+    TTS chunks are coalesced by a PlaybackSegmenter rather than yielded
+    one-for-one, because each yield becomes an independently encoded segment
+    carrying a frame of padding — see its docstring.
+    """
+    import queue as _queue
+
+    from rzr_aikit.ui.voice_bridge import TURN_FLUSH, TURN_RESET, PlaybackSegmenter
+
+    if bridge is None:
+        return
+
+    segmenter = PlaybackSegmenter()
+    while not bridge.stop.is_set():
+        try:
+            item = bridge.play_q.get(timeout=0.05)
+        except _queue.Empty:
+            continue
+
+        if item is TURN_RESET:
+            segmenter.reset()
+            continue
+
+        # TURN_FLUSH ends a reply: release the partial tail so the last word
+        # isn't stuck in the buffer. The generator stays open for the next reply.
+        segments = segmenter.flush() if item is TURN_FLUSH else segmenter.push(item)
+        for wav in segments:
+            yield wav
+
+
+def voice_poll(bridge):
+    """Timer tick: refresh the transcript and status from the bridge."""
+    if bridge is None:
+        return [], voice_status_html(None)
+    return bridge.transcript(), voice_status_html(bridge)
+
+
 def create_gradio_app(server_url: str):
     """
     Create the Gradio image generation interface.
@@ -464,6 +604,11 @@ def create_gradio_app(server_url: str):
             return voices
         except Exception:
             return False
+    def update_voices():
+        updated = get_available_voices()
+        if updated:
+            return gr.update(choices=updated, value=updated[0])
+        return gr.update(choices=[], value=None)
 
     voices = get_available_voices()
 
@@ -718,6 +863,8 @@ def create_gradio_app(server_url: str):
                             value=voices[0] if voices else None,
                             allow_custom_value=True,
                         )
+                        gradio_app.load(fn=update_voices, outputs=audio_voice)
+
                         with gr.Accordion("Additional Settings", open=False):
                             audio_language = gr.Textbox(
                                 label="Language",
@@ -763,12 +910,35 @@ def create_gradio_app(server_url: str):
                             autoplay=True,
                         )
 
+            with gr.Tab("Voice Agent") as voice_tab:
+                voice_bridge_state = gr.State(None)
+                with gr.Column(elem_id="voice-center-col"):
+                    voice_mic = gr.Audio(
+                        sources=["microphone"],
+                        streaming=True,
+                        type="numpy",
+                        elem_id="voice-mic",
+                        show_label=False,
+                        container=False,
+                    )
+                    voice_status = gr.HTML(value=voice_status_html(None), elem_id="voice-status")
+                voice_audio_out = gr.Audio(
+                    streaming=True,
+                    autoplay=True,
+                    visible='hidden',
+                )
+                voice_chat = gr.Chatbot(
+                    label="Conversation",
+                    height=400,
+                )
+                voice_timer = gr.Timer(0.3, active=False)
+
         active_tab = gr.State("image")
         current_examples = gr.State(IMAGE_EXAMPLES)
         examples_table = gr.Dataframe(
             value=[[e] for e in IMAGE_EXAMPLES],
             headers=["Examples"],
-            col_count=(1, "fixed"),
+            column_count=(1, "fixed"),
             interactive=False,
             wrap=False,
         )
@@ -780,8 +950,10 @@ def create_gradio_app(server_url: str):
                 return gr.update(value=text), empty, empty
             elif tab == "video":
                 return empty, gr.update(value=text), empty
-            else:
+            elif tab == "audio":
                 return empty, empty, gr.update(value=text)
+            else:
+                return empty, empty, empty
 
         examples_table.select(
             fn=route_example,
@@ -801,6 +973,13 @@ def create_gradio_app(server_url: str):
             fn=lambda: ("audio", [[e] for e in AUDIO_EXAMPLES], AUDIO_EXAMPLES, '<h1 style="margin-top: 5px; font-weight: 500;">Generate custom audio with local models</h1>'),
             outputs=[active_tab, examples_table, current_examples, tab_heading],
         )
+        # The voice tab has no prompt box, so it hides the shared examples table.
+        voice_tab.select(
+            fn=lambda: ("voice", gr.update(visible=False), [], '<h1 style="margin-top: 5px; font-weight: 500;">Talk to a local voice agent</h1>'),
+            outputs=[active_tab, examples_table, current_examples, tab_heading],
+        )
+        for _tab, _key in ((image_tab, "image"), (video_tab, "video"), (audio_tab, "audio")):
+            _tab.select(fn=lambda: gr.update(visible=True), outputs=[examples_table])
 
         generate_btn.click(
             fn=lambda p, h, w, st, c, se, n, img: generate_image(
@@ -840,6 +1019,50 @@ def create_gradio_app(server_url: str):
             fn=lambda p, h, w, fps, nf, n: generate_video(p, h, w, fps, nf, n, server_url),
             inputs=[video_prompt, video_height, video_width, video_fps, video_num_frames, video_negative_prompt],
             outputs=[video_output],
+        )
+
+        # --- Voice Agent wiring -------------------------------------------
+        # The mic's record button is the whole interface: recording connects,
+        # stopping disconnects. Playback is not chained here — it is re-armed per
+        # reply by voice_play_timer below.
+        voice_mic.start_recording(
+            fn=voice_start,
+            inputs=[voice_bridge_state],
+            outputs=[voice_bridge_state, voice_status, voice_chat],
+        ).then(
+            fn=lambda: gr.Timer(active=True),
+            outputs=[voice_timer],
+        ).then(
+            fn=voice_play,
+            inputs=[voice_bridge_state],
+            outputs=[voice_audio_out],
+        )
+
+        voice_mic.stop_recording(
+            fn=voice_stop,
+            inputs=[voice_bridge_state],
+            outputs=[voice_bridge_state, voice_status],
+        ).then(
+            fn=lambda: gr.Timer(active=False),
+            outputs=[voice_timer],
+        )
+
+        # trigger_mode="multiple" so mic ticks keep being accepted while the
+        # playback generator and timer are running.
+        voice_mic.stream(
+            fn=voice_on_mic,
+            inputs=[voice_mic, voice_bridge_state],
+            outputs=None,
+            stream_every=0.1,
+            trigger_mode="multiple",
+            show_progress="hidden",
+        )
+
+        voice_timer.tick(
+            fn=voice_poll,
+            inputs=[voice_bridge_state],
+            outputs=[voice_chat, voice_status],
+            show_progress="hidden",
         )
 
 
