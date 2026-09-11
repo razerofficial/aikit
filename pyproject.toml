@@ -6,18 +6,32 @@ authors = [{ name = "Razer Inc." }]
 license = { text = "Apache-2.0" }
 requires-python = "~=3.12.0" # vllm wants this stricter constraint
 dependencies = [
+    "torch==2.13.0",
+    "torchvision==0.28.0",
+    "torchaudio==2.11.0",
+    "transformers>=5.10.1,<5.15,!=5.13.0",
+    "accelerate==1.12.0",
+    "numpy>=2.1.2,<=2.2.6",
+    "prometheus-client>=0.22.1,<=0.24.1",
+
+    # AIKit dependencies
     "typer>0.19.2",
-    "numpy>=2.1.2,<3",
     "psutil>=7.0.0,<8",
-    "transformers>=5.8.0,<6",
-    "accelerate>=1.12.0",
     "nvidia-ml-py>12.575.51",
-    "prometheus-client>0.22.1",
     "typing-extensions>=4.14.1,<5",
-    "openai>1.97.1",
+    "openai>=3.0,<4",
     "humanize>=4.14.0,<5",
     "ray[default]>=2.0",
     "gradio>=6.18.0",
+
+    # RAG Pipeline Dependencies
+    "docling>=2.126.0,<3",
+    "langchain-text-splitters>=0.3.11,<0.4",
+    "langchain-core>=0.3.86,<0.4",
+    "chromadb>=1.5.9,<2",
+    "sentence-transformers>=6.0.0,<7",
+    "tqdm>=4.67.1,<5",
+    "requests>=2.32.3,<3",
 ]
 
 [project.optional-dependencies]
@@ -32,6 +46,17 @@ run_vllm = "rzr_aikit.utils.run_vllm:main"
 
 [tool.uv]
 package = true
+constraint-dependencies = [
+    "triton==3.7.1",
+    "cuda-core==1.0.1",
+    "tilelang==0.1.12",
+    "quack-kernels==0.6.4",
+    "huggingface-hub>=1.27.0,<2",
+    "tokenizers>=0.22.2",
+]
+
+[tool.uv.workspace]
+members = [".", "gpu_discovery", "vllm_plugins", "voice_agent"]
 
 [build-system]
 requires = ["hatchling"]

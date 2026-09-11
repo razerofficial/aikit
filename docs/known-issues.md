@@ -44,6 +44,60 @@ python -m http.server --bind 0.0.0.0 8000
 - After the error appears, you can proceed with `rzr-aikit model generate` commands
 - Ensure Windows Firewall allows the connection if needed
 
+### 3. GB10 (DGX Spark) Related Issues
+
+**Problem**: vLLM v0.28.0 running on SM 121 (GB10 DGX Spark) hardware experiences crashes, deadlocks, and kernel failures due to incorrect hardware capability detection and unsupported optimizations.
+
+**Symptoms**:
+- Runtime crashes during matrix multiplication operations
+- Inference pipeline hangs indefinitely with no response
+- Kernel launch failures on models using Multi-Latent Attention (MLA)
+- vLLM server starts but fails to complete inference requests
+
+**Solution**: Set few environment variables when starting the container
+
+```bash
+docker run -it \
+  --restart=unless-stopped \
+  --gpus all \
+  --ipc host \
+  --network host \
+  --mount type=bind,source=$HOME/.cache/huggingface,target=/var/aikit/.cache/huggingface \
+  --env HUGGING_FACE_HUB_TOKEN=<YOUR_TOKEN> \
+  --env VLLM_SKIP_DEEP_GEMM=1 \
+  --env VLLM_DISABLE_PLE=1 \
+  --env VLLM_FORCE_STANDARD_ATTENTION=1 \
+  razerofficial/aikit:latest
+```
+
+**What each workaround fixes**:
+
+1. VLLM_SKIP_DEEP_GEMM=1
+    - Issue: DeepGEMM false support detection
+    - Details: vLLM incorrectly detects SM 121 supports DeepGEMM operations, but execution crashes
+    - Fallback: Uses standard GEMM implementations instead
+2. VLLM_DISABLE_PLE=1
+    - Issue: Pipeline Lookahead Encoding (PLE) offload deadlocks
+    - Details: At TP=1 (single GPU), PLE prefetch causes indefinite hangs
+    - Fallback: Disables PLE prefetching optimization
+3. VLLM_FORCE_STANDARD_ATTENTION=1
+    - Issue: Multi-Latent Attention (MLA) decode shared memory overflow
+    - Details: MLA kernels allocate more shared memory than SM 121 supports
+    - Fallback: Forces standard attention (FlashAttention, xFormers) instead of MLA kernels
+
+**Expected behavior**:
+- vLLM server starts and serves requests successfully
+- Inference completes without crashes or hangs
+
+**Additional Notes**:
+- These workarounds are required for SM 121 (GB10 DGX Spark) hardware only
+- SM 120 (Jetson Orin, RTX 50 series) may not need all three workarounds
+- Performance impact is minimal (~0-5% slower) for most workloads
+- These are temporary workarounds until vLLM adds proper SM 121 support in future releases
+- Official vLLM ARM64 images support SM 121 via PTX compatibility when these workarounds are applied
+
+**Build-time workaround**: `--build-arg BUILD_BASE_IMAGE=pytorch/manylinuxaarch64-builder:cuda13.0` and `--build-arg torch_cuda_arch_list="12.0 12.0a 12.1 12.1a+PTX"` to compile the missing kernels. See [vllm-project/vllm#38484](https://github.com/vllm-project/vllm/pull/38484) for the underlying build issue.
+
 ---
 
 ## Getting Help

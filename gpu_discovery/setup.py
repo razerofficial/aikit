@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from setuptools import setup, find_packages
+from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 
@@ -36,9 +36,6 @@ include_dirs = [
 ]
 
 setup(
-    name="gpu_discovery",
-    version="0.1.0",
-    packages=find_packages(),
     ext_modules=[
         CUDAExtension(
             name="gpu_discovery_cpp",
@@ -73,10 +70,4 @@ setup(
         )
     ],
     cmdclass={"build_ext": BuildExtension},
-    entry_points={
-        "console_scripts": [
-            "gpu-discovery=gpu_discovery.cli:main",
-        ],
-    },
-    install_requires=["torch>=2.0", "nvidia-ml-py"],
 )

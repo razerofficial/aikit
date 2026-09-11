@@ -187,6 +187,7 @@ docker compose -f docker_compose/docker-compose.yaml up -d --pull always
 - [GPU Compatibility](docs/gpu-compatibility.md) - Supported GPUs and compute capabilities
 - [Fine-Tuning Guide](docs/fine-tuning.md) - Model customization
 - [Inference Guide](docs/inferencing.md) - Production deployment
+- [RAG Guide](docs/rag.md) - Retrieval-augmented generation with Open WebUI
 - [Container Guide](docs/build-container.md) - Docker setup
 - [Known Issues](docs/known-issues.md) - Common problems and solutions
 

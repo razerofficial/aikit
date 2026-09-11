@@ -66,6 +66,11 @@ class TestListCommand:
         mock_diffusion_class = mocker.patch(
             "rzr_aikit.utils.DiffusionModelInfoFetcher.DiffusionModelInfoFetcher"
         )
+        from rzr_aikit.utils.model_classifier import ModelCategory
+        mocker.patch(
+            "rzr_aikit.utils.model_classifier.classify_model",
+            return_value=ModelCategory.STANDARD,
+        )
         return mock_get_vram, mock_scan_cache, mock_fetcher_class, mock_diffusion_class
 
     def test_list_command_success(self, mocker, app, runner, mock_repo_with_weights):
@@ -198,22 +203,6 @@ class TestListCommand:
 
         assert result.exit_code == 0
         assert "test/dataset" not in result.stdout
-
-    def test_list_command_filters_repos_without_weights(
-        self, mocker, app, runner, mock_repo_without_weights
-    ):
-        """Test that repositories without model weights are filtered out."""
-        mock_get_vram, mock_scan_cache, _, _ = self._base_mocks(mocker)
-
-        cache_info = mocker.Mock()
-        cache_info.repos = [mock_repo_without_weights]
-        mock_scan_cache.return_value = cache_info
-        mock_get_vram.return_value = 24 * 1024**3
-
-        result = runner.invoke(app, ["model", "list"])
-
-        assert result.exit_code == 0
-        assert "test/config-only" not in result.stdout
 
     def test_list_command_multiple_models(self, mocker, app, runner):
         """Test listing multiple models with different compatibility."""
@@ -551,107 +540,3 @@ class TestListCommand:
         assert result.exit_code == 0
         assert "GPU discovery is in progress" in result.stdout
 
-    # --- Unit tests for has_weights ---
-
-    def test_has_weights_with_safetensors(self, mocker):
-        """Test has_weights with safetensors files."""
-        from rzr_aikit.model.list import has_weights
-
-        repo = mocker.Mock()
-        snapshot = mocker.Mock()
-        file_info = mocker.Mock()
-        file_info.file_name = "model.safetensors"
-        snapshot.files = [file_info]
-        repo.snapshots = [snapshot]
-
-        assert has_weights(repo) is True
-
-    def test_has_weights_with_pytorch_bin(self, mocker):
-        """Test has_weights with pytorch bin files."""
-        from rzr_aikit.model.list import has_weights
-
-        repo = mocker.Mock()
-        snapshot = mocker.Mock()
-        file_info = mocker.Mock()
-        file_info.file_name = "pytorch_model.bin"
-        snapshot.files = [file_info]
-        repo.snapshots = [snapshot]
-
-        assert has_weights(repo) is True
-
-    def test_has_weights_with_pt_files(self, mocker):
-        """Test has_weights with .pt files."""
-        from rzr_aikit.model.list import has_weights
-
-        repo = mocker.Mock()
-        snapshot = mocker.Mock()
-        file_info = mocker.Mock()
-        file_info.file_name = "model.pt"
-        snapshot.files = [file_info]
-        repo.snapshots = [snapshot]
-
-        assert has_weights(repo) is True
-
-    def test_has_weights_without_weight_files(self, mocker):
-        """Test has_weights with only config files."""
-        from rzr_aikit.model.list import has_weights
-
-        repo = mocker.Mock()
-        snapshot = mocker.Mock()
-        file_info = mocker.Mock()
-        file_info.file_name = "config.json"
-        snapshot.files = [file_info]
-        repo.snapshots = [snapshot]
-
-        assert has_weights(repo) is False
-
-    def test_has_weights_filters_config_and_tokenizer(self, mocker):
-        """Test has_weights ignores config and tokenizer files."""
-        from rzr_aikit.model.list import has_weights
-
-        repo = mocker.Mock()
-        snapshot = mocker.Mock()
-        config_file = mocker.Mock()
-        config_file.file_name = "config.json"
-        tokenizer_file = mocker.Mock()
-        tokenizer_file.file_name = "tokenizer.json"
-        snapshot.files = [config_file, tokenizer_file]
-        repo.snapshots = [snapshot]
-
-        assert has_weights(repo) is False
-
-    def test_has_weights_fallback_filesystem_scan(self, mocker):
-        """Test has_weights fallback to filesystem scan when no snapshots."""
-        from rzr_aikit.model.list import has_weights
-
-        mock_expanduser = mocker.patch("os.path.expanduser")
-        mock_walk = mocker.patch("os.walk")
-        mock_isdir = mocker.patch("os.path.isdir")
-
-        repo = mocker.Mock()
-        repo.snapshots = []
-        repo.repo_id = "test/model"
-
-        mock_expanduser.return_value = "/home/user/.cache/huggingface/hub"
-        mock_isdir.return_value = True
-        mock_walk.return_value = [
-            ("/cache/path", [], ["model.safetensors", "config.json"])
-        ]
-
-        assert has_weights(repo) is True
-
-    def test_has_weights_fallback_no_cache_dir(self, mocker):
-        """Test has_weights fallback when cache directory doesn't exist."""
-        from rzr_aikit.model.list import has_weights
-
-        mock_expanduser = mocker.patch("os.path.expanduser")
-        mock_isdir = mocker.patch("os.path.isdir")
-
-        repo = mocker.Mock()
-        repo.snapshots = []
-        repo.repo_id = "test/model"
-
-        mock_expanduser.return_value = "/home/user/.cache/huggingface/hub"
-        mock_isdir.return_value = False
-
-        assert has_weights(repo) is False

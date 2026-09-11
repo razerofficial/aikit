@@ -1,3 +1,18 @@
 [build-system]
-requires = ["setuptools", "torch"]
+requires = ["setuptools>=64", "torch"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpu_discovery"
+version = "0.1.0"
+requires-python = "~=3.12.0"
+# torch removed from runtime deps - inherits from vLLM base
+dependencies = ["nvidia-ml-py"]
+
+[project.scripts]
+gpu-discovery = "gpu_discovery.cli:main"
+
+# Explicit package list: this is a flat layout, so fp4/, fp8/ and cutlass/ sit next to the
+# package and setuptools auto-discovery bails out on the ambiguity.
+[tool.setuptools]
+packages = ["gpu_discovery"]

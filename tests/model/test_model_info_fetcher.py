@@ -127,8 +127,8 @@ class TestModelInfoFetcherMistralRemote:
             side_effect=[self._make_response(404), self._make_response(200, self.VOXTRAL_PARAMS)],
         )
         mocker.patch(
-            "rzr_aikit.utils.ModelInfoFetcher.snapshot_download",
-            side_effect=Exception("not cached"),
+            "rzr_aikit.utils.ModelInfoFetcher.resolve_cached_path",
+            return_value=None,
         )
 
         fetcher = ModelInfoFetcher("mistralai/Voxtral-Mini-3B-2507", allow_internet=True)
@@ -154,8 +154,8 @@ class TestModelInfoFetcherMistralRemote:
             side_effect=[self._make_response(404), self._make_response(200, params)],
         )
         mocker.patch(
-            "rzr_aikit.utils.ModelInfoFetcher.snapshot_download",
-            side_effect=Exception("not cached"),
+            "rzr_aikit.utils.ModelInfoFetcher.resolve_cached_path",
+            return_value=None,
         )
 
         fetcher = ModelInfoFetcher("mistralai/Voxtral-FP8", allow_internet=True)
@@ -176,8 +176,8 @@ class TestModelInfoFetcherMistralRemote:
             return_value=self._make_response(404),
         )
         mocker.patch(
-            "rzr_aikit.utils.ModelInfoFetcher.snapshot_download",
-            side_effect=Exception("not cached"),
+            "rzr_aikit.utils.ModelInfoFetcher.resolve_cached_path",
+            return_value=None,
         )
 
         with pytest.raises(FileNotFoundError):
@@ -199,8 +199,8 @@ class TestModelInfoFetcherMistralRemote:
             return_value=self._make_response(200, hf_config),
         )
         mocker.patch(
-            "rzr_aikit.utils.ModelInfoFetcher.snapshot_download",
-            side_effect=Exception("not cached"),
+            "rzr_aikit.utils.ModelInfoFetcher.resolve_cached_path",
+            return_value=None,
         )
 
         fetcher = ModelInfoFetcher("org/standard-model", allow_internet=True)
@@ -224,8 +224,8 @@ class TestModelInfoFetcherMistralRemote:
             return_value=self._make_response(200, hf_config),
         )
         mocker.patch(
-            "rzr_aikit.utils.ModelInfoFetcher.snapshot_download",
-            side_effect=Exception("not cached"),
+            "rzr_aikit.utils.ModelInfoFetcher.resolve_cached_path",
+            return_value=None,
         )
 
         fetcher = ModelInfoFetcher("org/model", allow_internet=True)

@@ -59,8 +59,6 @@ def list():
         for repo in info.repos:
             if repo.repo_type != "model":
                 continue
-            if not has_weights(repo):
-                continue
             try:
                 weight_size = None
                 data_type = None
@@ -129,44 +127,6 @@ def list():
             )
     except Exception as e:
         console.print_exception()
-
-def has_weights(repo):
-    """
-    Return True if the repo has any file that looks like a model weight file.
-    Tries snapshots, then falls back to scanning the HF cache path directly.
-    """
-    import os
-
-    weight_exts = (".bin", ".safetensors", ".pt")
-
-    # 1. Try metadata-based check (snapshots)
-    snapshots = getattr(repo, "snapshots", [])
-    if snapshots:
-        for snapshot in snapshots:
-            files = getattr(snapshot, "files", [])
-            for file_info in files:
-                f = getattr(file_info, "file_name", None)
-                if (
-                    f
-                    and f.endswith(weight_exts)
-                    and not f.startswith(("config", "tokenizer"))
-                ):
-                    return True
-        return False
-
-    # 2. Fallback: scan the HuggingFace cache path directly
-    repo_id = getattr(repo, "repo_id", None)
-    if repo_id:
-        cache_base = os.path.expanduser("~/.cache/huggingface/hub")
-        repo_dir = os.path.join(cache_base, f"models--{repo_id.replace('/', '--')}")
-        if os.path.isdir(repo_dir):
-            for root, dirs, files in os.walk(repo_dir):
-                for f in files:
-                    if f.endswith(weight_exts) and not f.startswith(
-                        ("config", "tokenizer")
-                    ):
-                        return True
-    return False
 
 
 if __name__ == "__main__":

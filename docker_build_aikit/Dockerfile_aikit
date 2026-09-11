@@ -10,7 +10,7 @@
 # Build arguments for version pinning
 ARG CUDA_VERSION_MAJOR=13
 ARG CUDA_VERSION_MINOR=0
-ARG VLLM_VERSION=v0.24.0
+ARG VLLM_VERSION=v0.28.0
 ARG VLLM_IMAGE=vllm/vllm-openai:$VLLM_VERSION
 
 FROM ${VLLM_IMAGE} AS base
@@ -28,10 +28,8 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 # Stage 2: GPU Tools Build
 # =============================================================================
 # Compiles custom GPU discovery module with CUTLASS support and vLLM plugins
-# Uses CUDA development environment for building GPU-accelerated extensions
+# Uses PyTorch 2.11.0 from vLLM base to ensure C++ ABI compatibility
 FROM base AS build_gpu_tools
-# Using base image instead of CUDA devel image to maintain Python package compatibility
-# This approach keeps dependency versions synchronized with the vLLM base image
 
 ARG CUDA_VERSION_MAJOR CUDA_VERSION_MINOR
 # Install CUDA development libraries required for building GPU extensions
@@ -43,23 +41,22 @@ RUN apt-get update -y && \
 COPY gpu_discovery gpu_discovery
 COPY vllm_plugins vllm_plugins
 
+# Install build backends for --no-build-isolation builds
+# Backend choices: setuptools(inside vllm base): gpu_discovery, hatchling: vllm_plugins, voice_agent, rzr-aikit
+RUN uv pip install --system hatchling
+
 # Build GPU discovery wheel
-RUN pip install build && \
-    echo 'Building GPU discovery module...' && \
-    cd gpu_discovery && \
+RUN echo 'Building GPU discovery module...' && \
     # TODO: Verify if MAX_JOBS override is necessary when using Ninja build system
     export MAX_JOBS=$(nproc) && \
-    python3 -m build --no-isolation --wheel --outdir ../gpu-discovery-dist --verbose && \
-    cd .. && \
-    python3 -m pip install gpu-discovery-dist/*.whl --verbose && \
+    uv build --wheel --no-build-isolation --out-dir gpu-discovery-dist --verbose gpu_discovery && \
+    uv pip install --system gpu-discovery-dist/*.whl --verbose && \
     echo 'GPU discovery module built successfully'
 
 # Build GPU ordering (vLLM plugins) wheel
 RUN echo 'Building GPU ordering (vLLM plugins)...' && \
-    cd vllm_plugins && \
-    python3 -m build --no-isolation --wheel --outdir ../gpu-ordering-dist --verbose && \
-    cd .. && \
-    python3 -m pip install gpu-ordering-dist/*.whl --verbose && \
+    uv build --wheel --no-build-isolation --out-dir gpu-ordering-dist --verbose vllm_plugins && \
+    uv pip install --system gpu-ordering-dist/*.whl --verbose && \
     echo 'GPU ordering (vLLM plugins) built successfully'
 
 # =============================================================================
@@ -99,17 +96,20 @@ COPY docker_build_aikit/env-init/activate.d/* /etc/profile.d/
 # =============================================================================
 # Stage 4: Razer AIKit Install (locked)
 # =============================================================================
-# Installs rzr-aikit and its dependencies at exact versions from uv.lock
+# Installs all workspace packages and their dependencies at exact versions from uv.lock
 FROM vllm_extended AS build_rzr_aikit
 
 COPY pyproject.toml uv.lock ./
 COPY rzr_aikit rzr_aikit/
+COPY voice_agent voice_agent/
 
-# Export pinned requirements from lockfile, then install into system Python
+# Export workspace dependencies from lockfile, then install to system Python
+# uv export reads the lockfile and generates a requirements.txt with exact versions
 RUN uv export --frozen --no-dev --no-hashes -o /tmp/rzr-requirements.txt && \
     uv pip install --system -r /tmp/rzr-requirements.txt && \
     uv pip install --system --no-deps . && \
-    echo "rzr-aikit installed at locked versions"
+    uv pip install --system --no-deps voice_agent/ && \
+    echo "rzr-aikit and workspace packages installed at locked versions"
 
 # =============================================================================
 # Stage 5: Test (Optional)
@@ -120,6 +120,7 @@ FROM vllm_extended AS test
 # Copy source code and tests
 COPY pyproject.toml uv.lock ./
 COPY rzr_aikit rzr_aikit/
+COPY voice_agent voice_agent/
 COPY tests tests/
 
 # Install at locked versions with dev deps, then run model tests
@@ -216,9 +217,23 @@ RUN apt-get update && \
         nano && \
     rm -rf /var/lib/apt/lists/*
 
-# Install LlamaFactory without resolving its dependencies to prevent version downgrades
-RUN uv pip install --system "llamafactory" && \
-    uv pip install --system "gradio>=6.18.0"
+# Install LlamaFactory without resolving its dependencies to prevent version downgrades.
+# LlamaFactory 0.9.5 caps transformers<=5.6.0, accelerate<=1.11.0 and gradio<=5.50.0,
+# all of which conflict with vllm-omni 0.28.0 (transformers>=5.10.1, accelerate==1.12.0)
+# and the gradio-6 dashboard. Letting it resolve silently downgrades all three and
+# breaks vLLM inference, so install it with --no-deps and then add back only the
+# dependencies that do not clash with the locked resolution.
+RUN uv pip install --system --no-deps "llamafactory" && \
+    uv pip install --system \
+        "datasets>=2.16.0,<=4.0.0" \
+        "peft>=0.18.0,<=0.18.1" \
+        "trl>=0.18.0,<=0.24.0" \
+        "torchdata>=0.10.0,<=0.11.0" \
+        "matplotlib>=3.7.0" \
+        "av>=10.0.0,<=16.0.0" \
+        "tyro<0.9.0" \
+        "hf-transfer" \
+        "fire"
 ARG USERNAME=Razer
 # Create non-root user with sudo privileges for security
 # Make the home directory a shared 1777 folder so that --user works

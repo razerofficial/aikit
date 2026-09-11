@@ -105,9 +105,44 @@ services:
     container_name: openwebui
     network_mode: host
     environment:
-      # OpenAI-compatible API endpoint (vLLM)
-      - OPENAI_API_BASE_URL=http://localhost:8000/v1
-      - OPENAI_API_KEY=sk-dummy
+      # Make this file the single source of truth. Without this, Open WebUI seeds
+      # its `config` DB table on first boot and those rows shadow every env var
+      # below for the life of the openwebui-data volume.
+      - ENABLE_PERSISTENT_CONFIG=False
+
+      # Chat → remote 8001
+      - OPENAI_API_BASE_URL=http://localhost:8001/v1
+      - OPENAI_API_KEY=rzr-aikit
+
+      # Embeddings → remote 8000
+      - RAG_EMBEDDING_ENGINE=openai
+      - RAG_OPENAI_API_BASE_URL=http://localhost:8000/v1
+      - RAG_OPENAI_API_KEY=rzr-aikit
+      - RAG_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+      - RAG_EMBEDDING_BATCH_SIZE=32            # default 1 = one round trip per chunk
+      - RAG_EMBEDDING_CONCURRENT_REQUESTS=4    # default 0; hides network latency
+
+      # Reranking → remote 8002 (full path required)
+      - RAG_RERANKING_ENGINE=external
+      - RAG_EXTERNAL_RERANKER_URL=http://localhost:8002/v1/rerank
+      - RAG_EXTERNAL_RERANKER_API_KEY=rzr-aikit
+      - RAG_RERANKING_MODEL=BAAI/bge-reranker-base
+      - RAG_EXTERNAL_RERANKER_TIMEOUT=30       # default unset
+
+      - VECTOR_DB=chroma
+      - RAG_TOP_K=10                           # default 3
+      - RAG_TOP_K_RERANKER=5                   # default 3
+      - ENABLE_RAG_HYBRID_SEARCH=true
+      - RAG_HYBRID_BM25_WEIGHT=0.5
+      # Chunk in the EMBEDDER'S OWN TOKENS, not characters. bge-small-en-v1.5
+      # hard-caps at 512 tokens and vLLM rejects longer input with HTTP 400
+      # (no server-side truncation). Character-based sizing is unsafe: 1000
+      # chars of prose is ~250 tokens, but 1000 chars of tables/formulas
+      # exceeds 512 and fails the whole embedding batch.
+      - RAG_TEXT_SPLITTER=token_transformers
+      - RAG_TOKENIZER_MODEL=BAAI/bge-small-en-v1.5
+      - CHUNK_SIZE=450                         # tokens, leaves margin under 512
+      - CHUNK_OVERLAP=50                       # tokens (~11%)
       # Authentication disabled for local development
       - WEBUI_AUTH=false
       # Custom port to avoid conflicts

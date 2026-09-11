@@ -56,7 +56,7 @@ export function Home(props: { open: (path: string) => void }) {
 
   const gridContainerStyle: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    gridTemplateColumns: '1fr 1fr 1fr',
     gap: '24px',
     width: '100%',
     marginBottom: '24px'
@@ -64,10 +64,6 @@ export function Home(props: { open: (path: string) => void }) {
 
   const sectionStyle: React.CSSProperties = {
     width: '100%'
-  };
-
-  const integrationsStyle: React.CSSProperties = {
-    width: '49%'
   };
 
   const sectionTitleStyle: React.CSSProperties = {
@@ -282,9 +278,8 @@ export function Home(props: { open: (path: string) => void }) {
             </li>
           </ul>
         </div>
-      </div>
 
-      <div style={integrationsStyle}>
+        <div style={sectionStyle}>
         <h2 style={sectionTitleStyle}>Integrations: Additional usage</h2>
         <ul style={listStyle}>
           <li>
@@ -335,8 +330,26 @@ export function Home(props: { open: (path: string) => void }) {
               10. Voice Agent
             </a>
           </li>
+          <li>
+            <a 
+              style={linkStyle}
+              onClick={() => props.open('notebooks/11_RAG_Pipeline.ipynb')}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#44d62c';
+                e.currentTarget.style.background = '#151515';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = '#222222';
+                e.currentTarget.style.background = '#111111';
+              }}
+            >
+              11. RAG
+            </a>
+          </li>
         </ul>
+        </div>
       </div>
+
     </div>
     </div>
   );

@@ -27,58 +27,19 @@ def download(
         $ rzr-aikit model download Qwen/Qwen3.5-0.8B
         $ rzr-aikit model download facebook/opt-125m
     """
-    # Check if model is already downloaded
-    is_downloaded = check_if_downloaded(model_name)
-    if is_downloaded:
+    from rzr_aikit.utils.hf_cache import is_cached
+
+    if is_cached(model_name):
         console.print(f"Model '{model_name}' is already downloaded.")
         return
 
     download_model(model_name)
 
 
-def check_if_downloaded(model_name: str):
-    """Check if model is already downloaded locally."""
-    try:
-        from rzr_aikit.model.list import has_weights
-        from huggingface_hub import scan_cache_dir
-
-        info = scan_cache_dir()
-        for repo in info.repos:
-            if repo.repo_id == model_name and has_weights(repo):
-                return True
-        return False
-    except Exception:
-        return False
-
-
 def download_model(model_name: str):
     """Download the model."""
-    from rzr_aikit.utils.model_classifier import ModelCategory, classify_model
-
-    with console.status("Starting model download..."):
-        category = classify_model(model_name)
 
     try:
-        if category == ModelCategory.STANDARD or category == ModelCategory.BAGEL:
-            try:
-                with console.status("Attempting download with vLLM loader..."):
-                    from vllm.config import LoadConfig, ModelConfig
-                    from vllm.model_executor.model_loader import get_model_loader
-                model_config = ModelConfig(
-                    model=model_name,
-                    tokenizer=model_name,
-                    tokenizer_mode="auto",
-                    trust_remote_code=False,
-                    dtype="auto",
-                    seed=0,
-                )
-                load_config = LoadConfig(load_format="auto")
-                loader = get_model_loader(load_config)
-                loader.download_model(model_config)
-                return
-            except Exception:
-                pass
-
         from huggingface_hub import snapshot_download
 
         with console.status("Downloading model snapshot..."):

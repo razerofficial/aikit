@@ -4,8 +4,9 @@ import json
 import requests
 
 from typing import Optional
-from huggingface_hub import snapshot_download, HfApi, ModelInfo, hf_hub_url
-from huggingface_hub.errors import LocalEntryNotFoundError
+from huggingface_hub import HfApi, ModelInfo, hf_hub_url
+
+from rzr_aikit.utils.hf_cache import resolve_cached_path
 
 
 def _normalize_mistral_params(raw: dict) -> dict:
@@ -67,16 +68,11 @@ class ModelInfoFetcher:
         self._load_model_info()
 
     def _try_find_in_cache(self, model_id: str) -> bool:
-        try:
-            local_dir = snapshot_download(repo_id=model_id, local_files_only=True)
-            self.model_path = local_dir
-            return True
-        except LocalEntryNotFoundError as e:
-            pass
-        except Exception as e:
-            pass
-
-        return False
+        local_dir = resolve_cached_path(model_id)
+        if local_dir is None:
+            return False
+        self.model_path = local_dir
+        return True
 
     def _load_model_info(self):
         if self.source in ("local", "cache"):
