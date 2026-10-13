@@ -540,3 +540,16 @@ class TestListCommand:
         assert result.exit_code == 0
         assert "GPU discovery is in progress" in result.stdout
 
+    def test_systemone_models_are_sized_like_standard_models(self, mocker, app, runner, mock_repo_with_weights):
+        """A SYSTEMONE model must go through ModelInfoFetcher, or its size is unknown."""
+        mock_get_vram, mock_scan_cache, mock_fetcher_class, _ = self._base_mocks(mocker)
+        from rzr_aikit.utils.model_classifier import ModelCategory
+        mocker.patch("rzr_aikit.utils.model_classifier.classify_model", return_value=ModelCategory.SYSTEMONE)
+        mock_fetcher_class.return_value = mocker.Mock(total_bytes=600000000, dtype="float16", quant_config={})
+        mock_scan_cache.return_value = mocker.Mock(repos=[mock_repo_with_weights])
+        mock_get_vram.side_effect = [48 * 1024**3, 96 * 1024**3]
+
+        result = runner.invoke(app, ["model", "list"])
+
+        assert result.exit_code == 0 and "✅ Yes" in result.stdout
+        mock_fetcher_class.assert_called_once()

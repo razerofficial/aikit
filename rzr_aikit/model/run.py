@@ -11,6 +11,7 @@ from rzr_aikit import model_app
 from rzr_aikit.utils.spinner import spinner
 
 console = Console()
+SYSTEMONE_LOG = "/tmp/rzr_aikit_systemone.log"
 
 
 class GPUStatus:
@@ -96,6 +97,13 @@ def run(
             help="Port to run the server on.",
         ),
     ] = 8000,
+    systemone_port: Annotated[
+        int,
+        typer.Option(
+            "--systemone-port",
+            help="Port of the SystemOne API, started next to vLLM for decision models.",
+        ),
+    ] = 8001,
 ):
     """
     Run a model for inferencing.
@@ -121,12 +129,12 @@ def run(
     if "JPY_PARENT_PID" in os.environ:
         engine = run_model(ctx, model, omni)
         if engine:
-            start_server(engine, port)
+            start_server(engine, port, systemone_port)
     else:
         with Live(gpu, console=console, refresh_per_second=8, transient=True):
             engine = run_model(ctx, model, omni)
             if engine:
-                start_server(engine, port)
+                start_server(engine, port, systemone_port)
 
 
 @spinner("Optimizing parameters...", console=console)
@@ -144,7 +152,21 @@ def run_model(ctx: typer.Context, model: str, omni: bool):
             fetcher = ModelInfoFetcher(model, allow_internet=has_connection)
             model = fetcher.model_path
 
+        from rzr_aikit.utils.model_classifier import ModelCategory, classify_model, systemone_provider
+
+        provider = systemone_provider(model) if classify_model(model) == ModelCategory.SYSTEMONE else None
+        server_flags: list[str] = []
+        if provider:
+            # --lora-modules is a server flag, not an EngineArgs field: it goes straight to `vllm serve`
+            provider_flags = systemone_vllm_flags(provider, model, flags)
+            if "--lora-modules" in provider_flags:
+                i = provider_flags.index("--lora-modules")
+                server_flags, provider_flags = provider_flags[i : i + 2], provider_flags[:i] + provider_flags[i + 2 :]
+            flags = flags + provider_flags
         engine = SmartVLLMServe(model, *flags)
+        engine.server_flags = server_flags
+        engine.system_one = provider is not None
+        engine.systemone_provider = provider
 
         if omni:
             engine.omni = True
@@ -198,8 +220,74 @@ def run_model(ctx: typer.Context, model: str, omni: bool):
         console.print(f"Unexpected error: {e}")
 
 
+def systemone_vllm_flags(provider: str, model: str, user_flags: list) -> list:
+    """Extra `vllm serve` flags a provider needs. AutoTrust serves its decision head as the LoRA module
+    `jev-decision`; the multimodal class (JEV-27B-VL) also needs at most 8 sequences per batch, or the
+    LoRA path returns wrong probabilities."""
+    if provider != "autotrust":
+        return []
+    import json
+    import os
+
+    from huggingface_hub import snapshot_download
+
+    adapter = os.path.join(
+        model if os.path.isdir(model) else snapshot_download(model, allow_patterns=["adapter_vllm/*", "calibration.json", "config.json"]),
+        "adapter_vllm",
+    )
+    flags = [
+        "--enable-lora", "--max-lora-rank", "32", "--lora-modules", f"jev-decision={adapter}",
+        "--logprobs-mode", "processed_logprobs",
+    ]
+    cfg_path = os.path.join(os.path.dirname(adapter), "config.json")
+    with open(cfg_path, encoding="utf-8") as f:
+        archs = json.load(f).get("architectures") or []
+    if any(a.endswith("ForConditionalGeneration") for a in archs):
+        flags += ["--mamba-cache-mode", "align"]
+        if "--max-num-seqs" not in user_flags:
+            flags += ["--max-num-seqs", "8"]
+    return flags
+
+
+def start_systemone(engine, vllm_port: int, systemone_port: int):
+    """Start the SystemOne wrapper next to vLLM, which keeps serving its own API untouched."""
+    import subprocess
+    import sys
+
+    model = engine.engine_args.model
+    served = engine.engine_args.served_model_name or model
+    served = served if isinstance(served, str) else served[0]
+    cmd = [
+        sys.executable, "-m", "vllm_plugins.systemone.server", "--model", model,
+        "--provider", engine.systemone_provider,
+        "--served-model-name", served,
+        "--vllm-url", f"http://localhost:{vllm_port}", "--port", str(systemone_port),
+    ]
+    return subprocess.Popen(
+        cmd, stdout=open(SYSTEMONE_LOG, "w"), stderr=subprocess.STDOUT, start_new_session=True
+    )
+
+
+def wait_for_systemone(wrapper, port: int, timeout: float = 180):
+    """Block until the wrapper answers /health; fail with its log if it exits first."""
+    import time
+    import urllib.request
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if wrapper.poll() is not None:
+            with open(SYSTEMONE_LOG) as f:
+                raise RuntimeError(f"SystemOne API failed to start:\n{''.join(f.readlines()[-10:])}")
+        try:
+            urllib.request.urlopen(f"http://localhost:{port}/health", timeout=2)
+            return
+        except OSError:
+            time.sleep(1)
+    raise RuntimeError(f"SystemOne API did not answer on port {port} within {timeout:.0f}s; see {SYSTEMONE_LOG}")
+
+
 @spinner("Starting up model server...", console=console)
-def start_server(engine, port=None):
+def start_server(engine, port=None, systemone_port=8001):
     """
     Start the VLLM server with the given engine.
     """
@@ -210,7 +298,11 @@ def start_server(engine, port=None):
         start_regex = re.compile(r"INFO:\s*(.*)")
 
         extra_args = ["--omni"] if getattr(engine, "omni", False) else None
-        process = engine.serve(port=port, extra=extra_args)
+        system_one = getattr(engine, "system_one", False)
+        if system_one and (port or 8000) == systemone_port:
+            raise ValueError(f"--systemone-port {systemone_port} is the vLLM port; pick another")
+        server_flags = engine.server_flags if isinstance(getattr(engine, "server_flags", None), list) else []
+        process = engine.serve(port=port, extra=(extra_args or []) + server_flags or None)
         start_print = False
         error_msg = None
         with open("/tmp/rzr_aikit.log", "r") as log_file:
@@ -231,9 +323,16 @@ def start_server(engine, port=None):
                         extracted = start_regex.search(piped_output)
                     console.print(extracted.group(1))
                 if "Application startup complete" in piped_output:
-                    console.print(
-                        "\nPlease use 'rzr-aikit model generate' to start generating responses."
-                    )
+                    if system_one:
+                        wrapper = start_systemone(engine, port or 8000, systemone_port)
+                        wait_for_systemone(wrapper, systemone_port)
+                        console.print(
+                            f"\nSystemOne API ready: POST http://localhost:{systemone_port}/v1/systemone"
+                        )
+                    else:
+                        console.print(
+                            "\nPlease use 'rzr-aikit model generate' to start generating responses."
+                        )
                     return process
     except Exception as e:
         console.print(f"Error starting server: {e}")

@@ -8,6 +8,8 @@ from rzr_aikit import model_app
 # VLLM is often launched with a command containing "vllm.entrypoints",
 # making this a reliable identifier.
 VLLM_IDENTIFIER = "bin/vllm"
+# The SystemOne wrapper that `model run` starts next to vLLM for decision models.
+SYSTEMONE_IDENTIFIER = "vllm_plugins.systemone.server"
 
 
 def find_vllm_processes():
@@ -22,7 +24,8 @@ def find_vllm_processes():
         try:
             # Check if the process's command line contains the identifier
             if process.info["cmdline"] and any(
-                VLLM_IDENTIFIER in arg for arg in process.info["cmdline"]
+                VLLM_IDENTIFIER in arg or SYSTEMONE_IDENTIFIER in arg
+                for arg in process.info["cmdline"]
             ):
                 found_processes.append(process)
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):

@@ -1,0 +1,15 @@
+# Models under perf test, one HuggingFace id per line.
+# Prefix a line with '#' to skip it. Blank lines ignored.
+#
+# Each model gets its own cold-started vLLM server, which is torn down
+# (and its GPU memory drained) before the next model starts.
+
+openbmb/MiniCPM5-1B
+LiquidAI/LFM2.5-2.6B
+LiquidAI/LFM2.5-8B-A1B
+nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+WeiboAI/VibeThinker-3B
+empero-ai/Qwen3.8-2B-Distill
+empero-ai/Qwen3.8-4B-Distill
+ibm-granite/granite-4.1-3b
+webAI-Official/TwIL-LM3

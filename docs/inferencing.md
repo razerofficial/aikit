@@ -403,6 +403,73 @@ Run this on both head and worker nodes to fully shut down the cluster.
 
 ---
 
+### Example 3: Decision Models
+
+This workflow serves a decision model, which answers structured questions (`choice`, `score` or `noul`, a yes/no) with calibrated probabilities instead of free text. `rzr-aikit model run` recognizes Mapika Decider models (`Mapika/decider-0.8b`, `Mapika/decider-2b`, `Mapika/decider-4b`) and AutoTrust JEV models (`autotrust/JEV-9B`, `autotrust/JEV-27B`, `autotrust/JEV-27B-VL`), and starts a SystemOne API on port 8001 next to the vLLM server. vLLM keeps serving its own API on port 8000 unchanged.
+
+#### 1. Check Model Information
+
+```bash
+rzr-aikit model info Mapika/decider-2b
+```
+
+#### 2. Download the Model
+
+```bash
+rzr-aikit model download Mapika/decider-2b
+```
+
+#### 3. Run the Model
+
+```bash
+rzr-aikit model run Mapika/decider-2b
+```
+
+Wait for `SystemOne API ready: POST http://localhost:8001/v1/systemone`. Use `--systemone-port` to change the port (default 8001). Extra vLLM flags work as for any model, for example `--gpu-memory-utilization 0.3` on a shared GPU.
+
+#### 4. Ask a Choice Question
+
+```bash
+curl -s localhost:8001/v1/systemone -H 'Content-Type: application/json' -d '{
+  "state": "My card was charged twice for the same purchase.",
+  "questions": {"team": {"type": "choice", "instructions": "Which team should handle this?",
+                         "criteria": {"billing": "Charges and invoices", "sales": "Questions about buying"}}}
+}'
+```
+
+The answer holds the chosen option, a `confidence` and the probability of every option. One request can hold several questions, and each is answered independently of the others.
+
+#### 5. Ask a Score and a Yes/No Question
+
+```bash
+curl -s localhost:8001/v1/systemone -H 'Content-Type: application/json' -d '{
+  "state": "Our checkout is down for all customers right now.",
+  "questions": {
+    "urgency": {"type": "score", "instructions": "How urgent is this request?",
+                "criteria": ["Routine", "Soon", "Today", "Immediately"]},
+    "outage": {"type": "noul", "instructions": "Does the message describe an outage?"}
+  }
+}'
+```
+
+A `score` question takes 2 to 10 ordered levels and returns an expected score with the probability of each level. A `noul` question returns the probability of yes.
+
+#### 6. Stop the Model
+
+```bash
+rzr-aikit model stop
+```
+
+This stops both the vLLM server and the SystemOne API.
+
+**Notes:**
+
+- AutoTrust models score on a fixed 0 to 5 scale, so a `score` question needs exactly six levels. They need a large GPU: the weights are about 18 GB for `autotrust/JEV-9B`, 54 GB for `autotrust/JEV-27B` and 56 GB for `autotrust/JEV-27B-VL`. On a GB10 with `--gpu-memory-utilization 0.6 --max-model-len 8192`, JEV-27B used about 73 GB and JEV-27B-VL about 70 GB.
+- `choice` questions take 2 to 255 options.
+- `notebooks/12_Decision_Models.ipynb` walks through all three question types with sample calls.
+
+---
+
 ## Additional Resources
 
 - **CLI Reference** - Complete command documentation: [cli-reference.md](cli-reference.md)

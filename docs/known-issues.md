@@ -46,7 +46,7 @@ python -m http.server --bind 0.0.0.0 8000
 
 ### 3. GB10 (DGX Spark) Related Issues
 
-**Problem**: vLLM v0.28.0 running on SM 121 (GB10 DGX Spark) hardware experiences crashes, deadlocks, and kernel failures due to incorrect hardware capability detection and unsupported optimizations.
+**Problem**: vLLM running on SM 121 (GB10 DGX Spark) hardware experiences crashes, deadlocks, and kernel failures due to incorrect hardware capability detection and unsupported optimizations.
 
 **Symptoms**:
 - Runtime crashes during matrix multiplication operations

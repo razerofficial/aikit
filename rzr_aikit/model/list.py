@@ -74,7 +74,7 @@ def list():
                     )
                     weight_size = fetcher.total_bytes
 
-                elif category in (ModelCategory.BAGEL, ModelCategory.STANDARD):
+                elif category in (ModelCategory.BAGEL, ModelCategory.STANDARD, ModelCategory.SYSTEMONE):
                     # Bagel, standard LLMs, and Mistral-format models (params.json)
                     from rzr_aikit.utils.ModelInfoFetcher import ModelInfoFetcher
                     fetcher = ModelInfoFetcher(repo.repo_id, allow_internet=False)

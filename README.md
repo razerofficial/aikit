@@ -189,6 +189,7 @@ docker compose -f docker_compose/docker-compose.yaml up -d --pull always
 - [Inference Guide](docs/inferencing.md) - Production deployment
 - [RAG Guide](docs/rag.md) - Retrieval-augmented generation with Open WebUI
 - [Container Guide](docs/build-container.md) - Docker setup
+- [Performance Benchmark](docs/perf-benchmarks.md) - Serving performance numbers
 - [Known Issues](docs/known-issues.md) - Common problems and solutions
 
 </td>
@@ -197,9 +198,13 @@ docker compose -f docker_compose/docker-compose.yaml up -d --pull always
 ### 💡 **Interactive Examples**
 - [On-Device Inference](notebooks/1_On_Device_Inferencing.ipynb)
 - [Distributed Inference](notebooks/2a_(Head)_Distributed_Inferencing.ipynb)
-- [Fine-Tuning with LoRA](notebooks/3_On_Device_Fine_Tuning_LoRA.ipynb)
-- [OpenAI API Integration](notebooks/5_Integrating_Razer_AIKit_with_OpenAI_API.ipynb)
-- [Semantic Search](notebooks/6_Semantic_Search.ipynb)
+- [Fine-Tuning with LoRA](notebooks/6_On_Device_Fine_Tuning_LoRA.ipynb)
+- [OpenAI API Integration](notebooks/8_Integrating_Razer_AIKit_with_OpenAI_API.ipynb)
+- [Image Generation](notebooks/3_On_Device_Image_Generation.ipynb)
+- [Video Generation](notebooks/5_On_Device_Video_Generation.ipynb)
+- [Voice Agent](notebooks/10_Voice_Agent.ipynb)
+- [RAG Pipeline](notebooks/11_RAG_Pipeline.ipynb)
+- [Decision Models](notebooks/12_Decision_Models.ipynb)
 
 </td>
 </tr>

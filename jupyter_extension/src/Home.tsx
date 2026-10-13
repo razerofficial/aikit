@@ -346,6 +346,22 @@ export function Home(props: { open: (path: string) => void }) {
               11. RAG
             </a>
           </li>
+          <li>
+            <a
+              style={linkStyle}
+              onClick={() => props.open('notebooks/12_Decision_Models.ipynb')}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#44d62c';
+                e.currentTarget.style.background = '#151515';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = '#222222';
+                e.currentTarget.style.background = '#111111';
+              }}
+            >
+              12. Decision Models
+            </a>
+          </li>
         </ul>
         </div>
       </div>

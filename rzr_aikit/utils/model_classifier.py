@@ -8,6 +8,7 @@ class ModelCategory(Enum):
     BAGEL = auto()
     DIFFUSION = auto()
     STANDARD = auto()
+    SYSTEMONE = auto()
 
 
 def _read_json_from_model(model_name: str, filename: str) -> dict | None:
@@ -51,6 +52,40 @@ def _is_diffusion(model_name: str) -> bool:
         return False
 
 
+def _cache_marker(model_name: str, filename: str) -> None:
+    """Keep the marker file in the HF cache, so later offline runs (which swap the model id for the
+    snapshot path) still recognise the model."""
+    try:
+        from huggingface_hub import hf_hub_download
+        hf_hub_download(model_name, filename)
+    except Exception:
+        pass
+
+
+def systemone_provider(model_name: str) -> str | None:
+    """"mapika" for Decider models (decider_config.json) and "autotrust" for JEV models
+    (adapter_vllm/decision_head.json). vLLM never downloads either, so fall back to the Hub file list."""
+    markers = {"decider_config.json": "mapika", "adapter_vllm/decision_head.json": "autotrust"}
+    try:
+        for name, provider in markers.items():
+            if _read_json_from_model(model_name, name) is not None:
+                return provider
+        # Fallback: check hub file list without downloading
+        from huggingface_hub import HfApi
+        files = {s.rfilename for s in HfApi().model_info(model_name).siblings or []}
+        for name, provider in markers.items():
+            if name in files:
+                _cache_marker(model_name, name)
+                return provider
+        return None
+    except Exception:
+        return None
+
+
+def _is_systemone(model_name: str) -> bool:
+    return systemone_provider(model_name) is not None
+
+
 def classify_model(model_name: str) -> ModelCategory:
     """Classify a model into a category to determine which fetcher to use.
 
@@ -58,10 +93,13 @@ def classify_model(model_name: str) -> ModelCategory:
     1. Bagel — config.json-based diffusion model (must be checked before _is_diffusion,
        which also returns True for Bagel but the DiffusionModelInfoFetcher cannot handle it)
     2. Diffusion — standard diffusers pipeline with model_index.json
-    3. Standard — LLM/VLM with config.json
+    3. SystemOne — Mapika Decider or AutoTrust JEV decision model
+    4. Standard — LLM/VLM with config.json
     """
     if _looks_like_bagel(model_name):
         return ModelCategory.BAGEL
     if _is_diffusion(model_name):
         return ModelCategory.DIFFUSION
+    if _is_systemone(model_name):
+        return ModelCategory.SYSTEMONE
     return ModelCategory.STANDARD

@@ -50,7 +50,7 @@ constraint-dependencies = [
     "triton==3.7.1",
     "cuda-core==1.0.1",
     "tilelang==0.1.12",
-    "quack-kernels==0.6.4",
+    "quack-kernels==0.6.5",
     "huggingface-hub>=1.27.0,<2",
     "tokenizers>=0.22.2",
 ]

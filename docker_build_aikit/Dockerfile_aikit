@@ -10,7 +10,7 @@
 # Build arguments for version pinning
 ARG CUDA_VERSION_MAJOR=13
 ARG CUDA_VERSION_MINOR=0
-ARG VLLM_VERSION=v0.28.0
+ARG VLLM_VERSION=v0.30.0
 ARG VLLM_IMAGE=vllm/vllm-openai:$VLLM_VERSION
 
 FROM ${VLLM_IMAGE} AS base
@@ -46,9 +46,12 @@ COPY vllm_plugins vllm_plugins
 RUN uv pip install --system hatchling
 
 # Build GPU discovery wheel
+# Pre-set thread counts so torch's init skips cpuinfo's arm_linux_init,
+# which segfaults here on an unrecognized /proc/cpuinfo (pytorch/cpuinfo#398).
 RUN echo 'Building GPU discovery module...' && \
     # TODO: Verify if MAX_JOBS override is necessary when using Ninja build system
     export MAX_JOBS=$(nproc) && \
+    export OMP_NUM_THREADS=$(nproc) MKL_NUM_THREADS=$(nproc) && \
     uv build --wheel --no-build-isolation --out-dir gpu-discovery-dist --verbose gpu_discovery && \
     uv pip install --system gpu-discovery-dist/*.whl --verbose && \
     echo 'GPU discovery module built successfully'
@@ -219,7 +222,7 @@ RUN apt-get update && \
 
 # Install LlamaFactory without resolving its dependencies to prevent version downgrades.
 # LlamaFactory 0.9.5 caps transformers<=5.6.0, accelerate<=1.11.0 and gradio<=5.50.0,
-# all of which conflict with vllm-omni 0.28.0 (transformers>=5.10.1, accelerate==1.12.0)
+# all of which conflict with vllm-omni 0.30.0 (transformers>=5.10.1, accelerate==1.12.0)
 # and the gradio-6 dashboard. Letting it resolve silently downgrades all three and
 # breaks vLLM inference, so install it with --no-deps and then add back only the
 # dependencies that do not clash with the locked resolution.

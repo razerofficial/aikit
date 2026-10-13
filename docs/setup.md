@@ -429,21 +429,12 @@ free -h
 df -h
 ```
 
+## Next Steps
 
-
-### Documentation
 - **[CLI Reference](cli-reference.md)** - Command reference and examples
 - **[Inference Guide](inferencing.md)** - Production deployment and optimization
-- **[Fine-Tuning Guide](fine-tuning.md)** - Customize models with your data
-- **[Container Guide](build-container.md)** - Build custom containers
 - **[Known Issues](known-issues.md)** - Common problems and solutions
-
-### Interactive Examples
-- **[On-Device Inference](../notebooks/1_On_Device_Inferencing.ipynb)** - Single GPU inference
-- **[Distributed Inference](../notebooks/2a_(Head)_Distributed_Inferencing.ipynb)** - Multi-GPU inference
-- **[Fine-Tuning with LoRA](../notebooks/4_On_Device_Fine_Tuning_LoRA.ipynb)** - Parameter-efficient training
-- **[OpenAI API Integration](../notebooks/6_Integrating_Razer_AIKit_with_OpenAI_API.ipynb)** - API compatibility
-- **[Semantic Search](../notebooks/7_Sematic_Search.ipynb)** - Vector search capabilities
+- **[More guides and notebooks](../README.md#-documentation--examples)** - Full list of documentation and interactive examples
 
 ## Getting Help
 
